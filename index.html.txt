@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f5f0e8">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Scott">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Scott</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{--parchment:#f5f0e8;--parchment-dark:#ede8dd;--ink:#0f0e0c;--ink-light:#3a3830;--ink-faint:#8a8678;--rule:#c8c0ae;--gold:#8B7355;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--parchment);color:var(--ink);font-family:'EB Garamond',Georgia,serif;display:flex;flex-direction:column;height:100dvh;overscroll-behavior:none;}
+  body::before{content:'';position:fixed;inset:0;background-image:repeating-linear-gradient(0deg,transparent,transparent 28px,rgba(0,0,0,0.018) 28px,rgba(0,0,0,0.018) 29px);pointer-events:none;z-index:0;}
+  header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--rule);position:relative;z-index:1;flex-shrink:0;background:var(--parchment);}
+  .header-left{display:flex;align-items:center;gap:10px;}
+  .header-icon{width:32px;height:32px;border-radius:4px;object-fit:cover;}
+  .logo{font-family:'Playfair Display',Georgia,serif;font-size:22px;font-weight:700;letter-spacing:0.04em;}
+  .logo-sub{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink-faint);font-style:italic;display:none;}
+  @media(min-width:500px){.logo-sub{display:inline;margin-left:10px;}}
+  .ledger-btn{font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-faint);background:none;border:none;cursor:pointer;padding:6px 0;border-bottom:1px solid transparent;transition:color 0.2s,border-color 0.2s;white-space:nowrap;}
+  .ledger-btn:hover{color:var(--ink);border-bottom-color:var(--ink);}
+
+  #chat{flex:1;overflow-y:auto;padding:20px 16px 8px;display:flex;flex-direction:column;gap:20px;position:relative;z-index:1;-webkit-overflow-scrolling:touch;}
+  @media(min-width:600px){#chat{padding:32px 40px 8px;gap:24px;}}
+  #chat::-webkit-scrollbar{width:3px;}#chat::-webkit-scrollbar-thumb{background:var(--rule);}
+  .msg{display:flex;flex-direction:column;max-width:88%;animation:fadeUp 0.3s ease;}
+  @media(min-width:600px){.msg{max-width:72%;}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  .msg.scott{align-self:flex-start;}.msg.user{align-self:flex-end;align-items:flex-end;}
+  .msg-label{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:5px;}
+  .msg-bubble{font-size:15px;line-height:1.7;color:var(--ink-light);}
+  @media(min-width:480px){.msg-bubble{font-size:16px;}}
+  .msg.scott .msg-bubble{font-style:italic;}.msg.user .msg-bubble{color:var(--ink);font-style:normal;}
+  .msg-rule{width:28px;height:1px;background:var(--rule);margin-top:8px;}
+  .msg.user .msg-rule{align-self:flex-end;}
+  .sync-badge{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;margin-top:6px;color:var(--ink-faint);font-style:normal;}
+  .sync-badge.ok{color:var(--gold);}.sync-badge.err{color:#9b2c2c;}
+  .pillar-tag{display:inline-block;font-size:9px;letter-spacing:0.15em;text-transform:uppercase;padding:2px 7px;border:1px solid var(--rule);margin-bottom:5px;color:var(--ink-faint);font-style:normal;}
+  .pillar-tag.income{border-color:#4a7c59;color:#4a7c59;}.pillar-tag.expense{border-color:#9b2c2c;color:#9b2c2c;}
+  .pillar-tag.asset{border-color:#8B7355;color:#8B7355;}.pillar-tag.liability{border-color:#6b5b45;color:#6b5b45;}
+  .typing{display:flex;align-items:center;gap:5px;padding:4px 0;}
+  .typing span{width:4px;height:4px;border-radius:50%;background:var(--ink-faint);animation:blink 1.2s ease-in-out infinite;}
+  .typing span:nth-child(2){animation-delay:0.2s;}.typing span:nth-child(3){animation-delay:0.4s;}
+  @keyframes blink{0%,60%,100%{opacity:0.2;}30%{opacity:1;}}
+  footer{border-top:1px solid var(--rule);padding:12px 16px max(12px,env(safe-area-inset-bottom));position:relative;z-index:1;flex-shrink:0;background:var(--parchment);}
+  @media(min-width:600px){footer{padding:18px 40px 24px;}}
+  .input-row{display:flex;align-items:center;gap:10px;}
+  #input{flex:1;background:none;border:none;border-bottom:1px solid var(--rule);padding:10px 0;font-family:'EB Garamond',serif;font-size:16px;color:var(--ink);outline:none;transition:border-color 0.2s;min-width:0;}
+  #input::placeholder{color:var(--ink-faint);font-style:italic;}
+  #input:focus{border-bottom-color:var(--ink);}
+
+  #send-btn{background:none;border:none;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-faint);cursor:pointer;padding:10px 0;transition:color 0.2s;white-space:nowrap;flex-shrink:0;}
+  #send-btn:hover{color:var(--ink);}#send-btn:disabled{color:var(--rule);cursor:default;}
+  .input-hint{margin-top:7px;font-size:10px;color:var(--ink-faint);font-style:italic;display:none;}
+  @media(min-width:480px){.input-hint{display:block;}}
+  #ledger-panel{display:none;position:fixed;inset:0;z-index:100;background:rgba(15,14,12,0.6);backdrop-filter:blur(2px);}
+  #ledger-panel.open{display:flex;align-items:flex-end;justify-content:center;}
+  @media(min-width:600px){#ledger-panel.open{align-items:center;}}
+  .ledger-card{background:var(--parchment);border-top:1px solid var(--rule);width:100%;max-height:85vh;overflow-y:auto;padding:24px 20px 32px;position:relative;animation:slideUp 0.25s ease;border-radius:12px 12px 0 0;}
+  @media(min-width:600px){.ledger-card{border:1px solid var(--rule);width:580px;max-height:82vh;padding:40px;border-radius:0;animation:slideUpCenter 0.25s ease;}}
+  @keyframes slideUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
+  @keyframes slideUpCenter{from{transform:translateY(16px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+  .ledger-handle{width:36px;height:3px;background:var(--rule);border-radius:2px;margin:0 auto 18px;}
+  @media(min-width:600px){.ledger-handle{display:none;}}
+  .ledger-title{font-family:'Playfair Display',serif;font-size:20px;font-weight:600;margin-bottom:3px;}
+  .ledger-subtitle{font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:24px;font-style:italic;}
+  .ledger-close{position:absolute;top:18px;right:18px;background:none;border:none;font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink-faint);cursor:pointer;}
+  .pillar{margin-bottom:22px;}
+  .pillar-name{font-family:'Playfair Display',serif;font-size:14px;font-weight:600;border-bottom:1px solid var(--rule);padding-bottom:7px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:baseline;}
+  .pillar-total{font-family:'EB Garamond',serif;font-size:13px;color:var(--gold);font-style:italic;}
+  .category-row{display:flex;justify-content:space-between;padding:4px 0 4px 14px;font-size:13px;color:var(--ink-light);border-bottom:1px dotted var(--parchment-dark);}
+  .category-name{font-style:italic;}.category-amount{color:var(--ink-faint);font-size:12px;}
+  .sub-row{display:flex;justify-content:space-between;padding:2px 0 2px 28px;font-size:12px;color:var(--ink-faint);}
+  .empty-ledger{font-style:italic;color:var(--ink-faint);font-size:14px;text-align:center;padding:20px 0;}
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <img class="header-icon" src="apple-touch-icon.png" alt="S">
+    <span class="logo">Scott</span>
+    <span class="logo-sub">Personal Financial Steward</span>
+  </div>
+  <button class="ledger-btn" onclick="openLedger()">Grand Ledger</button>
+</header>
+
+<div id="chat"></div>
+<footer>
+  <div class="input-row">
+    <input id="input" type="text" placeholder="At your service, sir." autocomplete="off"/>
+
+    <button id="send-btn" onclick="handleSend()">Send</button>
+  </div>
+  <div class="input-hint">I’ve seen you stare down gods sir, yet you look positively defeated by a file extension.</div>
+</footer>
+<div id="ledger-panel">
+  <div class="ledger-card">
+    <div class="ledger-handle"></div>
+    <button class="ledger-close" onclick="closeLedger()">Close</button>
+    <div class="ledger-title">The Grand Ledger</div>
+    <div class="ledger-subtitle">A full accounting of your estate</div>
+    <div id="ledger-body"></div>
+  </div>
+</div>
+<script>
+
+const APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbymZobLtD6rkkG8VoJxsBryI8GRQtpR_xkGrUyIqn-O2CeF6yFczTpwEueMrrwpUg/exec";
+const ledger={income:{},expenses:{},assets:{},liabilities:{}};
+const TYPE_TO_PILLAR={income:"income",expense:"expenses",asset:"assets",liability:"liabilities"};
+
+function parseAmount(text){
+  const t=text.toLowerCase().replace(/,/g,'');
+  const mults=[[/(\d+(?:\.\d+)?)\s*crore/,10000000],[/(\d+(?:\.\d+)?)\s*cr\b/,10000000],[/(\d+(?:\.\d+)?)\s*lakh/,100000],[/(\d+(?:\.\d+)?)\s*lac\b/,100000],[/(\d+(?:\.\d+)?)\s*million/,1000000],[/(\d+(?:\.\d+)?)\s*m\b/,1000000],[/(\d+(?:\.\d+)?)\s*thousand/,1000],[/(\d+(?:\.\d+)?)\s*k\b/,1000]];
+  for(const[re,m]of mults){const x=t.match(re);if(x)return Math.round(parseFloat(x[1])*m);}
+  const slangs=[/set\s+(?:me\s+)?back\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/shell(?:ed)?\s+out\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/came\s+to\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/cost(?:s|ed)?\s+(?:me\s+)?[₹$]?\s*(\d+(?:\.\d+)?)/,/dropped\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/blew\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/forked\s+out\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/coughed\s+up\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/in\s+the\s+hole\s+(?:for\s+)?[₹$]?\s*(\d+(?:\.\d+)?)/,/(\d+(?:\.\d+)?)\s+in\s+the\s+hole/,/(?:sent|transferred|wired|gave)\s+(?:me\s+)?[₹$]?\s*(\d+(?:\.\d+)?)/,/[₹$]?\s*(\d+(?:\.\d+)?)\s+purchase/,/loan\s+of\s+[₹$]?\s*(\d+(?:\.\d+)?)/,/borrowed\s+[₹$]?\s*(\d+(?:\.\d+)?)/];
+  for(const re of slangs){const x=t.match(re);if(x)return Math.round(parseFloat(x[1]));}
+  const pa=t.match(/\b(?:for|at|worth|of|costing|paid|spent|received|got|send|sent)\s+[₹$]?\s*(\d+(?:\.\d+)?)\b/);
+  if(pa)return Math.round(parseFloat(pa[1]));
+  const cn=t.match(/[₹$]\s*(\d+(?:\.\d+)?)/);
+  if(cn)return Math.round(parseFloat(cn[1]));
+  const all=[...t.matchAll(/\b(\d+(?:\.\d+)?)\b/g)].map(m=>parseFloat(m[1])).filter(n=>n>0);
+  if(!all.length)return null;
+  return Math.round(Math.max(...all));
+}
+function buildNote(text){
+  let t=text.replace(/^scott[,.\s]*/i,'').replace(/\b(i\s+)?(bought|purchased|got|received|paid|spent|earned|ordered|grabbed|picked\s+up|gave|tipped|donated|subscribed|renewed|recharged|filled|ate|dined|swiped|shed|bagged|won|invested\s+in|put\s+into|dropped|shelled\s+out|blew|forked\s+out|coughed\s+up|took\s+a?\s+loan\s+of?|borrowed|sold|used)\s*/i,'').replace(/set\s+(?:me\s+)?back\s+/i,'').replace(/shell(?:ed)?\s+out\s+/i,'').replace(/came\s+to\s+/i,'').replace(/\b(?:for|at|worth|costing)\s+[₹$]?[\d,.]+\s*(?:crore|cr|lakh|lac|million|thousand|k)?\b/gi,'').replace(/[₹$][\d,.]+\s*(?:crore|cr|lakh|lac|million|thousand|k)?\b/gi,'').replace(/\b[\d,.]+\s*(?:crore|cr|lakh|lac|million|thousand|k)\b/gi,'').replace(/\b\d+(?:\.\d+)?\b/g,'').replace(/\b(a|an|the|some|few|my|his|her|their|our|me|old|new|that|this)\b/gi,'').replace(/\s{2,}/g,' ').trim();
+  return t||text.replace(/^scott[,.\s]*/i,'').trim();
+}
+function splitClauses(text){
+  const parts=text.split(/\s+but\s+|\s+and\s+also\s+|\s+also\s+|\s+meanwhile\s+|\s+while\s+/i);
+  if(parts.length>1&&parts.every(p=>p.trim().length>3))return parts.map(p=>p.trim());
+  return[text];
+}
+const CONSUMED_SERVICES=/\b(gym\s*membership|membership|subscription|insurance|haircut|salon|massage|spa|consultation|class|course|coaching|tuition|recharge|ticket|pass|entry\s*fee|service\s*charge|maintenance\s*fee|annual\s*fee|processing\s*fee)\b/i;
+const OWNED_THINGS=/\b(shares?|stocks?|equity|mutual\s*fund|mf\b|sip\b|elss|index\s*fund|etf\b|bitcoin|btc|ethereum|eth|crypto|nft|property|land|plot|flat|house|apartment|villa|bungalow|real\s*estate|gold|silver|sgb|sovereign\s*gold|digital\s*gold|fixed\s*deposit|fd\b|recurring\s*deposit|rd\b|ppf|nps|epf|scooter|motorcycle|activa|splendor|two\s*wheeler|car\b|suv|sedan|four\s*wheeler|vehicle|automobile|laptop|macbook|computer|desktop|ipad|tablet|iphone|smartphone|mobile\s*phone|refrigerator|washing\s*machine|air\s*conditioner|television|tv\b|furniture|sofa|bed|mattress|watch|jewellery|jewelry|ring|necklace|bracelet|camera|drone)\b/i;
+const CONSUMED_THINGS=/\b(petrol|diesel|fuel|cng|groceries|grocery|vegetables|fruits|milk|eggs|bread|bananas?|chai|tea|coffee|snack|biscuit|pizza|burger|biryani|dosa|meal|lunch|dinner|breakfast|rent\b|electricity|water\s*bill|gas\s*cylinder|lpg|internet|wifi|broadband|mobile\s*bill|postpaid|prepaid|recharge|netflix|spotify|hotstar|amazon\s*prime|youtube\s*premium|medicine|capsule|pharmacy|uber|ola|rapido|auto\s*fare|cab\s*fare|metro|bus\s*fare|train\s*fare|flight\s*ticket|toll|parking|donation|charity|school\s*fee|college\s*fee|exam\s*fee)\b/i;
+const LIABILITY_SIGNALS=/\b(emi|home\s*loan|car\s*loan|personal\s*loan|education\s*loan|business\s*loan|credit\s*card\s*(bill|due|payment)|cc\s*bill|cc\s*due|mortgage|loan\s*repayment|borrowed|owe\b|debt\b|outstanding|simpl|lazypay|bnpl|buy\s*now\s*pay\s*later|slice\b|in\s*the\s*hole|took\s*a\s*loan|take\s*a\s*loan|took\s*loan|used\s*(my\s*)?credit\s*card)\b/i;
+const LIQUIDATION_VERBS=/\b(sold|redeemed|withdrew|liquidated|cashed\s*out|encashed|sold\s*off)\b/i;
+const INCOME_SIGNALS=/\b(salary|salry|stipend|bonus|dividend|interest\s*received|rent\s*received|royalty|pension|commission|freelance|consulting\s*fee|project\s*payment|tax\s*refund|cashback|gift\s*money|birthday\s*money|reimbursement|prize|reward|got\s*paid|credited|sent\s*me|wired\s*me|transferred\s*to\s*me|dad\s*sent|mom\s*sent|friend\s*sent|bhai\s*sent|income)\b/i;
+const EXPENSE_SLANG=/\b(spent|paid\s*for|swiped|shelled?\s*out|forked\s*out|coughed\s*up|set\s*me\s*back|came\s*to|shell\s*out|donated|subscribed|recharged|tipped|gave\s*away|splurged|burned)\b/i;
+function detectType(text){
+  const t=text.toLowerCase();
+  if(LIABILITY_SIGNALS.test(t))return"liability";
+  if(LIQUIDATION_VERBS.test(t))return"income";
+  if(INCOME_SIGNALS.test(t))return"income";
+  if(CONSUMED_SERVICES.test(t))return"expense";
+  if(OWNED_THINGS.test(t)&&!CONSUMED_THINGS.test(t))return"asset";
+  if(CONSUMED_THINGS.test(t))return"expense";
+  if(EXPENSE_SLANG.test(t))return"expense";
+  if(/\b(bought|purchased|paid|gave|ordered|grabbed|ate|dined|got\s+a)\b/.test(t)&&!INCOME_SIGNALS.test(t))return"expense";
+  if(/\b(got|received|sent\s+me|gives?\s+me)\b/.test(t)&&parseAmount(t))return"income";
+  if(/\b(cash\s*in\s*hand|cash\s*on\s*hand|kept\s*cash|have\s*cash|holding\s*cash)\b/.test(t))return"asset";
+  return null;
+}
+const EC=[{c:"food",s:"groceries",r:/\b(grocery|groceries|supermarket|bigbasket|blinkit|zepto|kirana|vegetables|sabzi|ration)\b/i},{c:"food",s:"dining_out",r:/\b(restaurant|dine|dining|cafe|zomato|swiggy|food\s*delivery|biryani|pizza|burger|dosa|idli|thali|paratha|noodles|dinner|lunch|breakfast|brunch)\b/i},{c:"food",s:"fruits_veggies",r:/\b(banana|apple|mango|orange|fruit|tomato|onion|potato)\b/i},{c:"food",s:"snacks",r:/\b(snack|biscuit|chips|namkeen|chocolate|candy|mithai|bakery|maggi)\b/i},{c:"food",s:"chai_coffee",r:/\b(chai|tea|coffee|cappuccino|latte)\b/i},{c:"food",s:"milk_dairy",r:/\b(milk|curd|paneer|ghee|butter|cheese|dairy)\b/i},{c:"food",s:"delivery_tip",r:/\b(delivery\s*guy|delivery\s*boy|tip\b|tipped|bhaiya)\b/i},{c:"transport",s:"fuel",r:/\b(petrol|diesel|fuel|cng|filling)\b/i},{c:"transport",s:"cab",r:/\b(uber|ola|rapido|cab|taxi|auto|rickshaw)\b/i},{c:"transport",s:"metro_bus",r:/\b(metro|bus\s*fare|ksrtc|msrtc|tube)\b/i},{c:"transport",s:"train",r:/\b(train|railway|irctc|tatkal)\b/i},{c:"transport",s:"flight",r:/\b(flight|airline|airfare|indigo|air\s*india|spicejet|plane)\b/i},{c:"transport",s:"toll_parking",r:/\b(toll|fastag|parking)\b/i},{c:"transport",s:"servicing",r:/\b(servicing|mechanic|tyre|oil\s*change)\b/i},{c:"health",s:"gym_fitness",r:/\b(gym|fitness|workout|crossfit|yoga|zumba|membership)\b/i},{c:"health",s:"medicine",r:/\b(medicine|capsule|syrup|pharmacy|chemist|1mg|netmeds|apollo)\b/i},{c:"health",s:"doctor",r:/\b(doctor|physician|clinic|consultation|checkup|hospital|dentist|specialist)\b/i},{c:"health",s:"supplements",r:/\b(protein|whey|supplement|vitamin|creatine|bcaa|omega)\b/i},{c:"utilities",s:"electricity",r:/\b(electricity|electric\s*bill|power\s*bill|bescom|msedcl)\b/i},{c:"utilities",s:"internet",r:/\b(internet|wifi|broadband|jio\s*fiber|airtel\s*fiber)\b/i},{c:"utilities",s:"mobile",r:/\b(recharge|mobile\s*bill|postpaid|prepaid|jio|airtel|vodafone)\b/i},{c:"utilities",s:"gas",r:/\b(lpg|gas\s*cylinder|cooking\s*gas|indane|hp\s*gas|bharat\s*gas)\b/i},{c:"utilities",s:"rent",r:/\b(rent\b|landlord|pg\b|paying\s*guest|hostel)\b/i},{c:"entertainment",s:"streaming",r:/\b(netflix|amazon\s*prime|hotstar|disney|zee5|sony\s*liv|jiocinema|youtube\s*premium|spotify|apple\s*music)\b/i},{c:"entertainment",s:"movies",r:/\b(movie|film|cinema|theatre|bookmyshow|pvr|inox)\b/i},{c:"entertainment",s:"gaming",r:/\b(game|gaming|steam|playstation|xbox|bgmi|pubg|valorant)\b/i},{c:"entertainment",s:"outing",r:/\b(dinner\s*with|outing|party|celebration|treat\b|get\s*together)\b/i},{c:"education",s:"courses",r:/\b(udemy|coursera|skillshare|unacademy|byjus|vedantu|masterclass|course\s*fee)\b/i},{c:"education",s:"books",r:/\b(book\b|textbook|novel|kindle)\b/i},{c:"education",s:"fees",r:/\b(school\s*fee|college\s*fee|tuition|coaching|exam\s*fee|admission)\b/i},{c:"shopping",s:"clothing",r:/\b(clothes|shirt|jeans|tshirt|kurta|saree|dress|shoes|sneakers|jacket|myntra|ajio|zara)\b/i},{c:"shopping",s:"personal_care",r:/\b(shampoo|soap|facewash|moisturizer|perfume|deodorant|salon|haircut|spa|nykaa)\b/i},{c:"finance",s:"insurance_premium",r:/\b(insurance\s*premium|policy\s*premium|lic\s*premium|term\s*plan)\b/i},{c:"finance",s:"tax",r:/\b(income\s*tax|gst|tds|advance\s*tax)\b/i},{c:"social",s:"gifts",r:/\b(gift\b|present\b|birthday\s*gift|wedding\s*gift)\b/i},{c:"social",s:"donation",r:/\b(donate|donation|charity|ngo|temple|church|mosque|gurudwara)\b/i}];
+const IC=[{c:"active_income",s:"salary",r:/\b(salary|paycheck|ctc|monthly\s*pay|stipend)\b/i},{c:"active_income",s:"bonus",r:/\b(bonus|incentive|appraisal|hike)\b/i},{c:"active_income",s:"freelance",r:/\b(freelance|contract|gig|fiverr|upwork|project\s*payment|client\s*paid)\b/i},{c:"active_income",s:"consulting",r:/\b(consult|consulting|advisory)\b/i},{c:"active_income",s:"business",r:/\b(business\s*income|profit|revenue|sales\s*income)\b/i},{c:"passive_income",s:"dividends",r:/\b(dividend)\b/i},{c:"passive_income",s:"interest",r:/\b(interest\s*received|fd\s*interest|savings\s*interest)\b/i},{c:"passive_income",s:"rental_income",r:/\b(rent\s*received|rental\s*income|tenant)\b/i},{c:"passive_income",s:"capital_gains",r:/\b(sold\s*shares|sold\s*stocks|sold\s*mutual|redeemed|capital\s*gain)\b/i},{c:"passive_income",s:"asset_sale",r:/\b(sold\s*my|sold\s*old|sold\s*the)\b/i},{c:"windfall",s:"gift_received",r:/\b(gift\s*received|gifted|birthday\s*money|cash\s*gift|diwali\s*bonus|dad\s*sent|mom\s*sent|friend\s*sent|bhai\s*sent|sent\s*me|wired\s*me)\b/i},{c:"windfall",s:"cashback_refund",r:/\b(cashback|cash\s*back|refund|reimbursement)\b/i},{c:"windfall",s:"prize_reward",r:/\b(won|prize|reward|lottery|competition)\b/i}];
+const AC=[{c:"investments",s:"stocks",r:/\b(shares?|stocks?|equity|nse|bse)\b/i},{c:"investments",s:"mutual_fund",r:/\b(mutual\s*fund|mf\b|sip\b|elss|index\s*fund|etf\b)\b/i},{c:"investments",s:"fixed_deposit",r:/\b(fixed\s*deposit|fd\b|recurring\s*deposit|rd\b)\b/i},{c:"investments",s:"ppf_nps_epf",r:/\b(ppf|nps|epf)\b/i},{c:"investments",s:"real_estate",r:/\b(property|land|plot|flat|house|apartment|villa|bungalow)\b/i},{c:"crypto",s:"bitcoin",r:/\b(bitcoin|btc)\b/i},{c:"crypto",s:"ethereum",r:/\b(ethereum|eth)\b/i},{c:"crypto",s:"altcoin",r:/\b(crypto|coin|token|binance|wazirx)\b/i},{c:"precious_metals",s:"gold",r:/\b(gold|sgb|sovereign\s*gold|digital\s*gold)\b/i},{c:"precious_metals",s:"silver",r:/\bsilver\b/i},{c:"precious_metals",s:"watch_jewelry",r:/\b(watch|jewellery|jewelry|ring|necklace|bracelet)\b/i},{c:"depreciating_assets",s:"two_wheeler",r:/\b(scooter|motorcycle|bike|activa|splendor|two\s*wheeler)\b/i},{c:"depreciating_assets",s:"car",r:/\b(car\b|suv|sedan|four\s*wheeler|automobile)\b/i},{c:"depreciating_assets",s:"laptop",r:/\b(laptop|macbook|computer|desktop)\b/i},{c:"depreciating_assets",s:"smartphone",r:/\b(iphone|smartphone|mobile\s*phone|oneplus|samsung\s*phone)\b/i},{c:"depreciating_assets",s:"appliances",r:/\b(refrigerator|washing\s*machine|air\s*conditioner|tv\b|television)\b/i},{c:"depreciating_assets",s:"camera_drone",r:/\b(camera|drone|gopro)\b/i},{c:"liquid_assets",s:"cash_in_hand",r:/\b(cash\s*in\s*hand|cash\s*on\s*hand|kept\s*cash|holding\s*cash)\b/i},{c:"liquid_assets",s:"savings_account",r:/\b(savings\s*account|current\s*account|deposited\s*in\s*bank)\b/i}];
+const LC=[{c:"long_term_loans",s:"home_loan",r:/\b(home\s*loan|house\s*loan|mortgage|housing\s*loan)\b/i},{c:"long_term_loans",s:"car_loan",r:/\b(car\s*loan|vehicle\s*loan|auto\s*loan)\b/i},{c:"long_term_loans",s:"education_loan",r:/\b(education\s*loan|student\s*loan)\b/i},{c:"long_term_loans",s:"personal_loan",r:/\b(personal\s*loan|took\s*a\s*loan|take\s*a\s*loan)\b/i},{c:"short_term_dues",s:"credit_card_bill",r:/\b(credit\s*card|cc\s*bill|cc\s*due|used\s*credit\s*card)\b/i},{c:"short_term_dues",s:"emi",r:/\b(emi|instalment|installment|equated)\b/i},{c:"short_term_dues",s:"bnpl",r:/\b(simpl|lazypay|bnpl|buy\s*now\s*pay\s*later|slice\b)\b/i},{c:"informal_debts",s:"borrowed_money",r:/\b(borrowed|owe\b|lent\s*by|friend\s*gave|family\s*gave|in\s*the\s*hole|roommate)\b/i}];
+function detectCategory(text,type){
+  const rules=type==="expense"?EC:type==="income"?IC:type==="asset"?AC:LC;
+  for(const{c,s,r}of rules){if(r.test(text))return{main_category:c,sub_category:s};}
+  const t=text.toLowerCase();
+  const noun=t.match(/\b(?:on|for|at|in|into|of)\s+(?:a\s+|an\s+|the\s+)?([a-z]+(?:\s+[a-z]+)?)/);
+  const sub=noun?noun[1].trim().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''):"general";
+  return{main_category:{expense:"misc",income:"other",asset:"other",liability:"other"}[type]||"misc",sub_category:sub};
+}
+function parseTransaction(text){
+  const amount=parseAmount(text);if(!amount)return null;
+  const type=detectType(text);if(!type)return null;
+  const{main_category,sub_category}=detectCategory(text,type);
+  return{type,amount,main_category,sub_category,note:buildNote(text)};
+}
+function parseAll(text){return splitClauses(text).map(c=>parseTransaction(c)).filter(Boolean);}
+function fmt(n){return Number(n).toLocaleString('en-IN');}
+function humanize(s){return(s||'').replace(/_/g,' ');}
+function rand(arr){return arr[Math.floor(Math.random()*arr.length)];}
+const REPLIES={
+  expense:[(c,s,a,n)=>`Duly noted, Sir. \u20b9${fmt(a)} for ${n} recorded under ${humanize(c)} \u2014 ${humanize(s)}.`,(c,s,a,n)=>`Of course, Master Sanket. ${n} at \u20b9${fmt(a)}, filed under ${humanize(c)}. Consumption acknowledged.`,(c,s,a,n)=>`Recorded, Sir. \u20b9${fmt(a)} on ${n}. The harvest diminishes, though the estate endures.`,(c,s,a,n)=>`As you instruct. \u20b9${fmt(a)} \u2014 ${humanize(s)} under ${humanize(c)} \u2014 entered accordingly.`],
+  income:[(c,s,a,n)=>`Splendid news, Master Sanket. \u20b9${fmt(a)} in ${humanize(s)} credited to the estate.`,(c,s,a,n)=>`Excellent, Sir. \u20b9${fmt(a)} received \u2014 entered into ${humanize(c)} with pleasure.`,(c,s,a,n)=>`A welcome inflow, Master Sanket. \u20b9${fmt(a)} from ${n} duly noted.`],
+  asset:[(c,s,a,n)=>`A fine acquisition, Master Sanket. ${n} at \u20b9${fmt(a)} added to holdings under ${humanize(c)}.`,(c,s,a,n)=>`Prudent as ever, Sir. \u20b9${fmt(a)} in ${humanize(s)} now stands among your assets.`,(c,s,a,n)=>`Recorded in the asset ledger, Sir. ${n} at \u20b9${fmt(a)} \u2014 a sound addition.`],
+  liability:[(c,s,a,n)=>`Noted, Sir. \u20b9${fmt(a)} under ${humanize(s)} entered as a liability. A gentleman's debt is managed promptly.`,(c,s,a,n)=>`The \u20b9${fmt(a)} ${humanize(s)} obligation is now recorded, Master Sanket.`,(c,s,a,n)=>`Recorded, Sir. \u20b9${fmt(a)} owed under ${humanize(c)}. The neighbouring kingdom shall be paid in due course.`],
+  confused:["I'm afraid I couldn't identify both an amount and a transaction in that, Sir. Might you rephrase?","Forgive me, Master Sanket \u2014 I caught the intent but not the figures. Could you include the amount?","My records require a sum, Sir. Do elaborate with the figure in question.","An intriguing statement, Sir, but the ledger needs a number to proceed. Might you oblige?"]
+};
+function generateReply(txn){
+  if(!txn)return rand(REPLIES.confused);
+  const{type,amount,main_category:c,sub_category:s,note:n}=txn;
+  return rand(REPLIES[type]||REPLIES.confused)(c,s,amount,n);
+}
+const ST=[
+  {r:/\b(hello|hi\b|hey\b|good\s*morning|good\s*evening|good\s*night)\b/i,fn:()=>rand(["At your service, Master Sanket. The ledger is open.","Good to hear from you, Sir. Shall we attend to the accounts?","Always present, Sir."])},
+  {r:/\b(thank|thanks|great\s*job|well\s*done|good\s*job|amazing|excellent|brilliant)\b/i,fn:()=>rand(["You are most gracious, Sir. I merely perform my duties.","Thank you, Master Sanket. Your approval is the finest reward.","Most kind, Sir."])},
+  {r:/\b(balance|total|summary|net\s*worth|how\s*much)\b/i,fn:()=>"Kindly open The Grand Ledger above, Sir \u2014 a full accounting of all four pillars."},
+  {r:/\b(help|what\s*can\s*you|how\s*do\s*i|how\s*to)\b/i,fn:()=>"Simply type any transaction, Sir. Try: 'Spent 500 on petrol', 'Got salary 45k', 'Bought a scooter for 80k', or 'Paid EMI 15000'."},
+];
+function checkSmallTalk(text){for(const{r,fn}of ST){if(r.test(text))return fn();}return null;}
+
+function appendMsg(role,text,txn){
+  const chat=document.getElementById('chat');
+  const div=document.createElement('div');div.className='msg '+role;
+  const label=document.createElement('div');label.className='msg-label';label.textContent=role==='scott'?'Scott':'Master Sanket';div.appendChild(label);
+  if(txn&&role==='scott'){const tag=document.createElement('div');tag.className='pillar-tag '+txn.type;tag.textContent={income:'Income',expense:'Expense',asset:'Asset',liability:'Liability'}[txn.type]||txn.type;div.appendChild(tag);}
+  const bubble=document.createElement('div');bubble.className='msg-bubble';bubble.textContent=text;div.appendChild(bubble);
+  if(txn){const badge=document.createElement('div');badge.className='sync-badge';badge.textContent='\u00b7 Updating the ledger\u2026';const id='b'+Date.now()+Math.random();badge.id=id;div.dataset.badgeId=id;div.appendChild(badge);}
+  const rule=document.createElement('div');rule.className='msg-rule';div.appendChild(rule);
+  chat.appendChild(div);chat.scrollTop=chat.scrollHeight;return div;
+}
+function updateBadge(div,state){const b=document.getElementById(div.dataset.badgeId);if(!b)return;b.className='sync-badge '+(state==='ok'?'ok':'err');b.textContent=state==='ok'?'\u00b7 Ledger updated.':'\u00b7 Could not reach the ledger, Sir.';}
+function showTyping(){const chat=document.getElementById('chat');const div=document.createElement('div');div.className='msg scott';div.id='typing';const l=document.createElement('div');l.className='msg-label';l.textContent='Scott';const t=document.createElement('div');t.className='typing';t.innerHTML='<span></span><span></span><span></span>';div.appendChild(l);div.appendChild(t);chat.appendChild(div);chat.scrollTop=chat.scrollHeight;}
+function removeTyping(){const t=document.getElementById('typing');if(t)t.remove();}
+function updateLedger(txn){const p=TYPE_TO_PILLAR[txn.type];if(!ledger[p][txn.main_category])ledger[p][txn.main_category]={};if(!ledger[p][txn.main_category][txn.sub_category])ledger[p][txn.main_category][txn.sub_category]=0;ledger[p][txn.main_category][txn.sub_category]+=txn.amount;}
+async function syncToSheet(txn){const params=new URLSearchParams({datetime:new Date().toISOString(),amount:(txn.type==='expense'||txn.type==='liability')?-txn.amount:txn.amount,type:txn.type,main_category:txn.main_category,sub_category:txn.sub_category,note:txn.note});await fetch(APPS_SCRIPT_URL+'?'+params.toString(),{mode:'no-cors'});}
+function openLedger(){
+  const body=document.getElementById('ledger-body');
+  const pillars=[{key:'income',label:'Income \u2014 The Inflow'},{key:'expenses',label:'Expenses \u2014 The Outflow'},{key:'assets',label:'Assets \u2014 The Wealth'},{key:'liabilities',label:'Liabilities \u2014 The Debt'}];
+  let html='';let hasAny=false;
+  pillars.forEach(p=>{const cats=ledger[p.key];if(!Object.keys(cats).length)return;hasAny=true;let total=0;let cHtml='';Object.entries(cats).forEach(([cat,subs])=>{const ct=Object.values(subs).reduce((a,b)=>a+b,0);total+=ct;cHtml+='<div class="category-row"><span class="category-name">'+humanize(cat)+'</span><span class="category-amount">\u20b9'+fmt(ct)+'</span></div>';Object.entries(subs).forEach(([sub,amt])=>{cHtml+='<div class="sub-row"><span>'+humanize(sub)+'</span><span>\u20b9'+fmt(amt)+'</span></div>';});});html+='<div class="pillar"><div class="pillar-name"><span>'+p.label+'</span><span class="pillar-total">\u20b9'+fmt(total)+'</span></div>'+cHtml+'</div>';});
+  body.innerHTML=hasAny?html:'<div class="empty-ledger">The ledger awaits its first entry, Sir.</div>';
+  document.getElementById('ledger-panel').classList.add('open');
+}
+function closeLedger(){document.getElementById('ledger-panel').classList.remove('open');}
+async function handleSend(){
+  const input=document.getElementById('input');const text=input.value.trim();if(!text)return;
+  input.value='';input.disabled=true;document.getElementById('send-btn').disabled=true;
+  appendMsg('user',text);showTyping();
+  await new Promise(r=>setTimeout(r,380));removeTyping();
+  const st=checkSmallTalk(text);
+  if(st){appendMsg('scott',st);input.disabled=false;document.getElementById('send-btn').disabled=false;input.focus();return;}
+  const parsed=parseAll(text);
+  if(parsed.length===0){appendMsg('scott',rand(REPLIES.confused));}
+  else if(parsed.length===1){const txn=parsed[0];const msgDiv=appendMsg('scott',generateReply(txn),txn);try{await syncToSheet(txn);updateBadge(msgDiv,'ok');updateLedger(txn);}catch(e){updateBadge(msgDiv,'err');}}
+  else{const labels={income:'Income',expense:'Expense',asset:'Asset',liability:'Liability'};appendMsg('scott','Two entries to record, Sir: '+parsed.map(txn=>labels[txn.type]+': \u20b9'+fmt(txn.amount)+' ('+humanize(txn.sub_category)+')').join(' \u00b7 ')+'.');for(const txn of parsed){const msgDiv=appendMsg('scott',generateReply(txn),txn);try{await syncToSheet(txn);updateBadge(msgDiv,'ok');updateLedger(txn);}catch(e){updateBadge(msgDiv,'err');}}}
+  input.disabled=false;document.getElementById('send-btn').disabled=false;input.focus();
+}
+document.getElementById('input').addEventListener('keydown',e=>{if(e.key==='Enter')handleSend();});
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js', {scope: './'}).catch(()=>{}));}
+window.addEventListener('load',()=>{
+  setTimeout(()=>{
+    appendMsg('scott',"Good day, Master Sanket. Scott at your service. The four pillars of your estate await \u2014 Income, Expenses, Assets, and Liabilities. How shall we proceed?");
+  },400);
+});
+
+</script>
+</body>
+</html>
