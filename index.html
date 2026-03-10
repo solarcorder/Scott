@@ -18,18 +18,43 @@
   html,body{height:100%;overflow:hidden;}
   body{background:var(--parchment);color:var(--ink);font-family:'EB Garamond',Georgia,serif;display:flex;flex-direction:column;height:100dvh;overscroll-behavior:none;}
   body::before{content:'';position:fixed;inset:0;background-image:repeating-linear-gradient(0deg,transparent,transparent 28px,rgba(0,0,0,0.018) 28px,rgba(0,0,0,0.018) 29px);pointer-events:none;z-index:0;}
-  header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--rule);position:relative;z-index:1;flex-shrink:0;background:var(--parchment);}
+  header{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--rule);position:relative;z-index:1;flex-shrink:0;background:var(--parchment);}
   .header-left{display:flex;align-items:center;gap:10px;}
-  .header-icon{width:32px;height:32px;border-radius:4px;object-fit:cover;}
-  .logo{font-family:'Playfair Display',Georgia,serif;font-size:22px;font-weight:700;letter-spacing:0.04em;}
+  .header-icon{width:30px;height:30px;border-radius:4px;object-fit:cover;}
+  .logo{font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:700;letter-spacing:0.04em;}
   .logo-sub{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink-faint);font-style:italic;display:none;}
   @media(min-width:500px){.logo-sub{display:inline;margin-left:10px;}}
+
+  /* Desktop nav — hidden on mobile */
+  .header-right{display:none;align-items:center;gap:14px;}
+  @media(min-width:600px){.header-right{display:flex;}}
   .ledger-btn{font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-faint);background:none;border:none;cursor:pointer;padding:6px 0;border-bottom:1px solid transparent;transition:color 0.2s,border-color 0.2s;white-space:nowrap;}
   .ledger-btn:hover{color:var(--ink);border-bottom-color:var(--ink);}
+  .health-btn{font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-faint);background:none;border:none;cursor:pointer;padding:6px 0;border-bottom:1px solid transparent;transition:color 0.2s,border-color 0.2s;white-space:nowrap;}
+  .health-btn:hover{color:var(--ink);border-bottom-color:var(--ink);}
+
+  /* Mobile bottom tab bar */
+  #mobile-tabs{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:90;background:var(--parchment);border-top:1px solid var(--rule);padding:0 0 max(0px,env(safe-area-inset-bottom));}
+  @media(min-width:600px){#mobile-tabs{display:none;}}
+  .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 4px 7px;background:none;border:none;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  .mob-tab-icon{font-size:17px;line-height:1;}
+  .mob-tab-label{font-family:'EB Garamond',serif;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-faint);}
+  .mob-tab:active .mob-tab-label,.mob-tab:active .mob-tab-icon{opacity:0.5;}
+  .mob-tab.active .mob-tab-label{color:var(--gold);}
+
+  /* Dashboard iframe overlay */
+  #dashboard-overlay{display:none;position:fixed;inset:0;z-index:200;background:var(--parchment);flex-direction:column;}
+  #dashboard-overlay.open{display:flex;}
+  #dashboard-overlay-bar{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--rule);background:var(--parchment);flex-shrink:0;}
+  #dashboard-overlay-title{font-family:'Playfair Display',serif;font-size:15px;font-weight:600;letter-spacing:0.04em;}
+  #dashboard-overlay-close{font-family:'EB Garamond',serif;font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--ink-faint);background:none;border:none;cursor:pointer;}
+  #dashboard-frame{flex:1;border:none;width:100%;}
 
   #chat{flex:1;overflow-y:auto;padding:20px 16px 8px;display:flex;flex-direction:column;gap:20px;position:relative;z-index:1;-webkit-overflow-scrolling:touch;}
   @media(min-width:600px){#chat{padding:32px 40px 8px;gap:24px;}}
-  #chat::-webkit-scrollbar{width:0px;}#chat::-webkit-scrollbar-thumb{background:transparent;}.health-card::-webkit-scrollbar{width:0px;}.health-card::-webkit-scrollbar-thumb{background:transparent;}.ledger-card::-webkit-scrollbar{width:0px;}.ledger-card::-webkit-scrollbar-thumb{background:transparent;}html *{scrollbar-width:none;}
+  /* Push content above bottom tab bar on mobile */
+  @media(max-width:599px){#chat{padding-bottom:72px;}footer{padding-bottom:calc(58px + max(0px,env(safe-area-inset-bottom)));}}
+{width:0px;}#chat::-webkit-scrollbar-thumb{background:transparent;}.health-card::-webkit-scrollbar{width:0px;}.health-card::-webkit-scrollbar-thumb{background:transparent;}.ledger-card::-webkit-scrollbar{width:0px;}.ledger-card::-webkit-scrollbar-thumb{background:transparent;}html *{scrollbar-width:none;}
   .msg{display:flex;flex-direction:column;max-width:88%;animation:fadeUp 0.3s ease;position:relative;}
   @media(min-width:600px){.msg{max-width:72%;}}
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
@@ -295,12 +320,41 @@
     <span class="logo-sub">Personal Financial Steward</span>
   </div>
   <div class="header-right">
-    <button class="ledger-btn" onclick="openTreasury()" id="treasury-display">Treasury</button>
+    <button class="ledger-btn" onclick="openTreasury()">Treasury</button>
     <button class="ledger-btn" onclick="openLedger()">Ledger</button>
     <button class="health-btn" onclick="openHealth()">Health</button>
-    <button class="ledger-btn" onclick="window.open('dashboard.html','_blank')" style="color:var(--gold);border-bottom-color:var(--gold);">Dashboard</button>
+    <button class="ledger-btn" onclick="openDashboard()" style="color:var(--gold);">Dashboard</button>
   </div>
 </header>
+
+<!-- Mobile bottom tab bar (hidden on desktop) -->
+<div id="mobile-tabs">
+  <button class="mob-tab" onclick="openTreasury()">
+    <span class="mob-tab-icon">🏦</span>
+    <span class="mob-tab-label">Treasury</span>
+  </button>
+  <button class="mob-tab" onclick="openLedger()">
+    <span class="mob-tab-icon">📋</span>
+    <span class="mob-tab-label">Ledger</span>
+  </button>
+  <button class="mob-tab" onclick="openHealth()">
+    <span class="mob-tab-icon">❤️</span>
+    <span class="mob-tab-label">Health</span>
+  </button>
+  <button class="mob-tab active" onclick="openDashboard()">
+    <span class="mob-tab-icon">📊</span>
+    <span class="mob-tab-label">Dashboard</span>
+  </button>
+</div>
+
+<!-- In-app Dashboard overlay -->
+<div id="dashboard-overlay">
+  <div id="dashboard-overlay-bar">
+    <span id="dashboard-overlay-title">The Estate Dashboard</span>
+    <button id="dashboard-overlay-close" onclick="closeDashboard()">← Back to Scott</button>
+  </div>
+  <iframe id="dashboard-frame" src="" title="Dashboard"></iframe>
+</div>
 
 <div id="chat">
   <div id="welcome">
@@ -1709,6 +1763,20 @@ function deleteLoan(id) {
   saveLoans(loans);
   renderTreasury();
 }
+function openDashboard() {
+  const overlay = document.getElementById('dashboard-overlay');
+  const frame = document.getElementById('dashboard-frame');
+  if (!overlay || !frame) return;
+  // Load dashboard only once, or reload if empty
+  if (!frame.src || frame.src === window.location.href || frame.src === 'about:blank') {
+    frame.src = './dashboard.html';
+  }
+  overlay.classList.add('open');
+}
+function closeDashboard() {
+  const overlay = document.getElementById('dashboard-overlay');
+  if (overlay) overlay.classList.remove('open');
+}
 function openTreasury() {
   const val = getTreasury();
   const input = document.getElementById('treasury-input');
@@ -2196,7 +2264,7 @@ function routeInput(text) {
         <input class="treasury-input" id="treasury-input" type="number" placeholder="Enter balance…"/>
         <button class="treasury-save" onclick="saveTreasury()">Set</button>
       </div>
-      <div class="treasury-note">note">One does hope the treasury remains a fortress, and not a sieve, Sir.</div>
+      <div class="treasury-note">Scott adjusts your balance automatically as you log transactions. Set it once to your current bank balance to begin.</div>
     </div>
 
     <!-- Active Obligations -->
