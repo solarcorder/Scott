@@ -834,7 +834,8 @@ let pinMode = 'enter'; // 'set' | 'confirm' | 'enter'
 let pinConfirmBuf = '';
 
 function initPin() {
-  if (!localStorage.getItem('scott_pin')) localStorage.setItem('scott_pin', '2805');
+  // Always enforce 2805 — overwrite any old PIN from previous versions
+  localStorage.setItem('scott_pin', '2805');
   pinMode = 'enter';
   document.getElementById('pin-prompt').textContent = 'Enter PIN';
   document.getElementById('pin-set-note').textContent = '';
@@ -2195,7 +2196,7 @@ function routeInput(text) {
         <input class="treasury-input" id="treasury-input" type="number" placeholder="Enter balance…"/>
         <button class="treasury-save" onclick="saveTreasury()">Set</button>
       </div>
-      <div class="treasury-note">One does hope the treasury remains a fortress, and not a sieve, Sir.</div>
+      <div class="treasury-note">Scott adjusts your balance automatically as you log transactions. Set it once to your current bank balance to begin.</div>
     </div>
 
     <!-- Active Obligations -->
