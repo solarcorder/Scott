@@ -198,7 +198,7 @@
   </div>
   <div style="display:flex;align-items:center;gap:24px;">
     <div id="last-updated"></div>
-    <a href="index.html" class="back-btn">← Return to Scott</a>
+    <a href="index.html" class="back-btn" onclick="if(window.parent!==window){event.preventDefault();window.parent.postMessage('closeDashboard','*');}">← Return to Scott</a>
   </div>
 </header>
 
