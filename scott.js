@@ -2400,7 +2400,7 @@ async function _fetchWiki(text) {
     const last = bubbles[bubbles.length - 1];
     if (last && last.textContent.includes('consulting the archives')) {
       last.textContent = '';
-      _typewrite(last, `From the archives, Sir — on "${data.title || term}":\n\n${short}\n\nThis is from Wikipedia. For financial decisions, always verify with a qualified advisor.`);
+      typeMsg(last, `From the archives, Sir — on "${data.title || term}":\n\n${short}\n\nThis is from Wikipedia. For financial decisions, always verify with a qualified advisor.`, () => { const chat = document.getElementById('chat'); if(chat) chat.scrollTop = chat.scrollHeight; });
     }
   } catch(e) {
     const chat = document.getElementById('chat');
@@ -2408,7 +2408,7 @@ async function _fetchWiki(text) {
     const last = bubbles[bubbles.length - 1];
     if (last && last.textContent.includes('consulting the archives')) {
       last.textContent = '';
-      _typewrite(last, `I wasn't able to locate "${term}" in the archives, Sir. Could you rephrase or be more specific?`);
+      typeMsg(last, `I wasn't able to locate "${term}" in the archives, Sir. Could you rephrase or be more specific?`, () => { const chat = document.getElementById('chat'); if(chat) chat.scrollTop = chat.scrollHeight; });
     }
   }
 }
