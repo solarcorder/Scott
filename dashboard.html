@@ -198,9 +198,16 @@
   </div>
   <div style="display:flex;align-items:center;gap:24px;">
     <div id="last-updated"></div>
-    <a href="index.html" class="back-btn" onclick="if(window.parent!==window){event.preventDefault();window.parent.postMessage('closeDashboard','*');}">← Return to Scott</a>
+    <a href="index.html" class="back-btn" id="back-btn-standalone">← Return to Scott</a>
   </div>
 </header>
+
+<script>
+  // Hide the in-page Return button when dashboard is inside Scott's overlay iframe
+  if (window.parent !== window) {
+    document.getElementById('back-btn-standalone').style.display = 'none';
+  }
+</script>
 
 <main id="main-content" style="display:none;">
 
