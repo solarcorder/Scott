@@ -33,14 +33,18 @@
   .health-btn{font-family:'EB Garamond',serif;font-size:11px;letter-spacing:0.15em;text-transform:uppercase;color:var(--ink-faint);background:none;border:none;cursor:pointer;padding:6px 0;border-bottom:1px solid transparent;transition:color 0.2s,border-color 0.2s;white-space:nowrap;}
   .health-btn:hover{color:var(--ink);border-bottom-color:var(--ink);}
 
-  /* Mobile bottom tab bar */
-  #mobile-tabs{display:flex;position:fixed;bottom:0;left:0;right:0;z-index:90;background:var(--parchment);border-top:1px solid var(--rule);padding:0 0 max(0px,env(safe-area-inset-bottom));}
-  @media(min-width:600px){#mobile-tabs{display:none;}}
-  .mob-tab{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 4px 7px;background:none;border:none;cursor:pointer;-webkit-tap-highlight-color:transparent;}
-  .mob-tab-icon{font-size:17px;line-height:1;}
-  .mob-tab-label{font-family:'EB Garamond',serif;font-size:9px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ink-faint);}
-  .mob-tab:active .mob-tab-label,.mob-tab:active .mob-tab-icon{opacity:0.5;}
-  .mob-tab.active .mob-tab-label{color:var(--gold);}
+  /* Hamburger menu button — mobile only */
+  #mob-menu-btn{display:flex;align-items:center;justify-content:center;background:none;border:none;cursor:pointer;padding:6px;-webkit-tap-highlight-color:transparent;}
+  @media(min-width:600px){#mob-menu-btn{display:none;}}
+  .ham-bar{display:block;width:18px;height:1px;background:var(--ink);margin:3px 0;transition:all 0.2s;}
+
+  /* Dropdown nav — mobile only */
+  #mob-nav{display:none;position:absolute;top:100%;right:0;background:var(--parchment);border:1px solid var(--rule);border-top:none;z-index:50;min-width:140px;}
+  #mob-nav.open{display:block;}
+  .mob-nav-item{display:block;width:100%;text-align:left;font-family:'EB Garamond',serif;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-faint);background:none;border:none;padding:13px 18px;cursor:pointer;border-bottom:1px dotted var(--rule);transition:color 0.15s,background 0.15s;white-space:nowrap;}
+  .mob-nav-item:last-child{border-bottom:none;}
+  .mob-nav-item:active{background:var(--parchment-dark);color:var(--ink);}
+  .mob-nav-item.gold{color:var(--gold);}
 
   /* Dashboard iframe overlay */
   #dashboard-overlay{display:none;position:fixed;inset:0;z-index:200;background:var(--parchment);flex-direction:column;}
@@ -52,8 +56,6 @@
 
   #chat{flex:1;overflow-y:auto;padding:20px 16px 8px;display:flex;flex-direction:column;gap:20px;position:relative;z-index:1;-webkit-overflow-scrolling:touch;}
   @media(min-width:600px){#chat{padding:32px 40px 8px;gap:24px;}}
-  /* Push content above bottom tab bar on mobile */
-  @media(max-width:599px){#chat{padding-bottom:72px;}footer{padding-bottom:calc(58px + max(0px,env(safe-area-inset-bottom)));}}
 {width:0px;}#chat::-webkit-scrollbar-thumb{background:transparent;}.health-card::-webkit-scrollbar{width:0px;}.health-card::-webkit-scrollbar-thumb{background:transparent;}.ledger-card::-webkit-scrollbar{width:0px;}.ledger-card::-webkit-scrollbar-thumb{background:transparent;}html *{scrollbar-width:none;}
   .msg{display:flex;flex-direction:column;max-width:88%;animation:fadeUp 0.3s ease;position:relative;}
   @media(min-width:600px){.msg{max-width:72%;}}
@@ -313,7 +315,7 @@
 </style>
 </head>
 <body>
-<header>
+<header style="position:relative;">
   <div class="header-left">
     <img class="header-icon" src="apple-touch-icon.png" alt="S">
     <span class="logo">Scott</span>
@@ -325,27 +327,20 @@
     <button class="health-btn" onclick="openHealth()">Health</button>
     <button class="ledger-btn" onclick="openDashboard()" style="color:var(--gold);">Dashboard</button>
   </div>
+  <!-- Hamburger — mobile only -->
+  <button id="mob-menu-btn" onclick="toggleMobNav()" aria-label="Menu">
+    <span class="ham-bar"></span>
+    <span class="ham-bar"></span>
+    <span class="ham-bar"></span>
+  </button>
+  <!-- Dropdown -->
+  <div id="mob-nav">
+    <button class="mob-nav-item" onclick="openTreasury();closeMobNav()">Treasury</button>
+    <button class="mob-nav-item" onclick="openLedger();closeMobNav()">Ledger</button>
+    <button class="mob-nav-item" onclick="openHealth();closeMobNav()">Health</button>
+    <button class="mob-nav-item gold" onclick="openDashboard();closeMobNav()">Dashboard</button>
+  </div>
 </header>
-
-<!-- Mobile bottom tab bar (hidden on desktop) -->
-<div id="mobile-tabs">
-  <button class="mob-tab" onclick="openTreasury()">
-    <span class="mob-tab-icon">🏦</span>
-    <span class="mob-tab-label">Treasury</span>
-  </button>
-  <button class="mob-tab" onclick="openLedger()">
-    <span class="mob-tab-icon">📋</span>
-    <span class="mob-tab-label">Ledger</span>
-  </button>
-  <button class="mob-tab" onclick="openHealth()">
-    <span class="mob-tab-icon">❤️</span>
-    <span class="mob-tab-label">Health</span>
-  </button>
-  <button class="mob-tab active" onclick="openDashboard()">
-    <span class="mob-tab-icon">📊</span>
-    <span class="mob-tab-label">Dashboard</span>
-  </button>
-</div>
 
 <!-- In-app Dashboard overlay -->
 <div id="dashboard-overlay">
@@ -1763,6 +1758,17 @@ function deleteLoan(id) {
   saveLoans(loans);
   renderTreasury();
 }
+function toggleMobNav() {
+  const nav = document.getElementById('mob-nav');
+  nav.classList.toggle('open');
+}
+function closeMobNav() {
+  document.getElementById('mob-nav')?.classList.remove('open');
+}
+// Close dropdown when tapping outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('#mob-menu-btn') && !e.target.closest('#mob-nav')) closeMobNav();
+});
 function openDashboard() {
   const overlay = document.getElementById('dashboard-overlay');
   const frame = document.getElementById('dashboard-frame');
