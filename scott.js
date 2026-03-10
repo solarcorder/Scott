@@ -2506,6 +2506,13 @@ function hardKeywordRoute(text) {
   if (!hasAmount && /\b(on track|how am i|am i okay|am i balanced|am i doing|my status|the verdict|estate doing|in good shape|spending okay|should i be worried|budget healthy|steward say|review my finances|doing financially|performing)\b/.test(t)) return 'query_status';
   if (/\b(my ratio|percentage.*spend|how much.*mandates|gratuities.*reached|spent.*income.*status|spent.*income.*verdict|spent.*income.*balanced)\b/.test(t)) return 'query_ratio';
 
+  // ── WIKIPEDIA TRIGGERS (hardcoded — work without model) ─────────────────
+  // "what is X", "explain X", "define X", "meaning of X", "what does X mean"
+  // Also catches single known financial terms typed alone
+  const wikiTrigger = /^(what (is|are|does|do)|explain|define|meaning of|tell me about|how does|what do you mean by)\b/i;
+  const knownTerms = /^(inflation|deflation|cagr|nav|sip|elss|ppf|nps|epf|fd|mf|mutual fund|index fund|etf|ltcg|stcg|repo rate|gdp|recession|compound interest|diversification|beta|alpha|hedging|liquidity|volatility|sebi|rbi|irda|amfi|rera|fema|gst|tds|hra|ulip|sgb|nifty|sensex|p\/e ratio|pe ratio|book value|dividend|equity|debt fund|liquid fund|flexi cap|bitcoin|blockchain|startup|ipo|venture capital)\b/i;
+  if (wikiTrigger.test(t) || knownTerms.test(t.trim())) return 'wiki_general';
+
   return null; // let model or parser handle
 }
 
