@@ -1777,6 +1777,8 @@ function closeDashboard() {
   const overlay = document.getElementById('dashboard-overlay');
   if (overlay) overlay.classList.remove('open');
 }
+// Listen for message from dashboard iframe's Return to Scott button
+window.addEventListener('message', e => { if (e.data === 'closeDashboard') closeDashboard(); });
 function openTreasury() {
   const val = getTreasury();
   const input = document.getElementById('treasury-input');
