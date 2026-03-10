@@ -1,4 +1,3 @@
-
 const APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzuHpab64FUO9QCuJsuHABQISn3kXd2czdyp6xKM_30ThMiJbVCdSwgUKHoRqEZd5-M/exec";
 const ledger={income:{},expenses:{},assets:{},liabilities:{}};
 const TYPE_TO_PILLAR={income:"income",expense:"expenses",asset:"assets",liability:"liabilities"};
@@ -537,6 +536,8 @@ async function handleTransactions(parsedList, rawText) {
       const st=updateState(txn);
       const adv=runAdviceEngine(st);
       if(adv){setTimeout(()=>{appendMsg('scott',adv.text);},700);}
+      const proAlert=runProactiveEngine(txn,st);
+      if(proAlert){setTimeout(()=>{appendMsg('scott',proAlert);},adv?1500:700);}
     }catch(e){updateBadge(msgDiv,'err');}
   } else {
     appendMsg('scott','Two entries to record, Sir: '+parsedList.map(txn=>labels[txn.type]+': \u20b9'+fmt(txn.amount)+' ('+humanize(txn.sub_category)+')').join(' \u00b7 ')+'.');
@@ -547,6 +548,8 @@ async function handleTransactions(parsedList, rawText) {
         await syncToSheet(txn);persistTransaction(txn);updateBadge(msgDiv,'ok');updateLedger(txn);updateTreasury(txn);
         const st=updateState(txn);const adv=runAdviceEngine(st);
         if(adv){setTimeout(()=>{appendMsg('scott',adv.text);},700);}
+        const proAlert=runProactiveEngine(txn,st);
+        if(proAlert){setTimeout(()=>{appendMsg('scott',proAlert);},adv?1500:700);}
       }catch(e){updateBadge(msgDiv,'err');}
     }
   }
@@ -753,7 +756,7 @@ function loadState() {
   if (state.month !== key) {
     // New month — carry forward previous income for growth detection
     const prevIncome = state.income || 0;
-    state = { month: key, income: 0, needs: 0, wants: 0, investing: 0, prevMonthIncome: prevIncome, lastAdviceTime: 0 };
+    state = { month: key, income: 0, needs: 0, wants: 0, investing: 0, prevMonthIncome: prevIncome, lastAdviceTime: 0, velocityAlertFired: false, idleCashAlertFired: false, subAlertFired: false };
     saveState(state);
   }
   return state;
@@ -1553,41 +1556,123 @@ async function loadBrain() {
   }
 }
 
-// ── TF-IDF VECTORIZER (JS port of sklearn TfidfVectorizer) ────────────────
-function tokenize(text) {
+// ── TF-IDF VECTORIZER — handles both word-only (v1) and word+char (v2) ──────
+function tokenize(text, mode = 'word', ngram = [1, 2]) {
   const t = text.toLowerCase().replace(/[^\w\s%]/g, ' ');
-  const words = t.match(/\b[a-zA-Z0-9%]+\b/g) || [];
-  const tokens = [...words];
-  // Add bigrams
-  for (let i = 0; i < words.length - 1; i++) {
-    tokens.push(words[i] + ' ' + words[i+1]);
+  const [lo, hi] = ngram;
+
+  if (mode === 'word') {
+    const words = t.match(/\b[a-zA-Z0-9%]+\b/g) || [];
+    const tokens = [...words];
+    for (let n = 2; n <= hi; n++) {
+      for (let i = 0; i <= words.length - n; i++) {
+        tokens.push(words.slice(i, i + n).join(' '));
+      }
+    }
+    return tokens;
   }
-  return tokens;
+
+  if (mode === 'char') {
+    // char_wb: pad each word with spaces, then extract char n-grams
+    const words = t.split(/\s+/).filter(Boolean);
+    const tokens = [];
+    for (const w of words) {
+      const padded = ' ' + w + ' ';
+      for (let n = lo; n <= hi; n++) {
+        for (let i = 0; i <= padded.length - n; i++) {
+          tokens.push(padded.slice(i, i + n));
+        }
+      }
+    }
+    return tokens;
+  }
+  return [];
+}
+
+function _buildVec(tokens, vocab, idf, offset = 0) {
+  const tf = {};
+  tokens.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+  const size = idf.length;
+  const vec = new Float32Array(size);
+  Object.entries(tf).forEach(([tok, count]) => {
+    const idx = vocab[tok];
+    if (idx !== undefined) {
+      const tfVal = 1 + Math.log(count);
+      vec[idx - offset] = tfVal * idf[idx - offset];
+    }
+  });
+  // L2 normalise
+  let norm = 0;
+  for (let i = 0; i < size; i++) norm += vec[i] * vec[i];
+  norm = Math.sqrt(norm);
+  if (norm > 0) for (let i = 0; i < size; i++) vec[i] /= norm;
+  return vec;
 }
 
 function tfidfVector(text, model) {
-  const tokens = tokenize(text);
+  const mode = model.feature_mode || 'word';
+
+  if (mode === 'word_char') {
+    // v2 model: word features [0..word_n-1] + char features [word_n..end]
+    const nWord = model.word_n;
+    const nChar = model.idf.length - nWord;
+
+    const wordTokens = tokenize(text, 'word', model.word_ngram || [1, 2]);
+    const charTokens = tokenize(text, 'char', model.char_ngram || [2, 4]);
+
+    // Build word sub-vec
+    const wTf = {};
+    wordTokens.forEach(t => { wTf[t] = (wTf[t] || 0) + 1; });
+    const wVec = new Float32Array(nWord);
+    Object.entries(wTf).forEach(([tok, count]) => {
+      const idx = model.vocab[tok];
+      if (idx !== undefined && idx < nWord) {
+        wVec[idx] = (1 + Math.log(count)) * model.idf[idx];
+      }
+    });
+    let wNorm = 0;
+    for (let i = 0; i < nWord; i++) wNorm += wVec[i] * wVec[i];
+    wNorm = Math.sqrt(wNorm);
+    if (wNorm > 0) for (let i = 0; i < nWord; i++) wVec[i] /= wNorm;
+
+    // Build char sub-vec
+    const cTf = {};
+    charTokens.forEach(t => { cTf[t] = (cTf[t] || 0) + 1; });
+    const cVec = new Float32Array(nChar);
+    Object.entries(cTf).forEach(([tok, count]) => {
+      const idx = model.vocab[tok];
+      if (idx !== undefined && idx >= nWord) {
+        cVec[idx - nWord] = (1 + Math.log(count)) * model.idf[idx];
+      }
+    });
+    let cNorm = 0;
+    for (let i = 0; i < nChar; i++) cNorm += cVec[i] * cVec[i];
+    cNorm = Math.sqrt(cNorm);
+    if (cNorm > 0) for (let i = 0; i < nChar; i++) cVec[i] /= cNorm;
+
+    // Concatenate
+    const merged = new Float32Array(nWord + nChar);
+    merged.set(wVec, 0);
+    merged.set(cVec, nWord);
+    return merged;
+  }
+
+  // v1 model: word-only
+  const words = tokenize(text, 'word', [1, 2]);
   const tf = {};
-  tokens.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
-  
-  const vec = new Float32Array(Object.keys(model.vocab).length);
-  const vocabSize = vec.length;
-  
-  Object.entries(tf).forEach(([token, count]) => {
-    const idx = model.vocab[token];
+  words.forEach(t => { tf[t] = (tf[t] || 0) + 1; });
+  const size = Object.keys(model.vocab).length;
+  const vec = new Float32Array(size);
+  Object.entries(tf).forEach(([tok, count]) => {
+    const idx = model.vocab[tok];
     if (idx !== undefined) {
-      // sublinear_tf: 1 + log(count)
-      const tfVal = model.sublinear_tf ? 1 + Math.log(count) : count;
-      vec[idx] = tfVal * model.idf[idx];
+      vec[idx] = (model.sublinear_tf ? 1 + Math.log(count) : count) * model.idf[idx];
     }
   });
-  
-  // L2 normalize
   let norm = 0;
-  for (let i = 0; i < vocabSize; i++) norm += vec[i] * vec[i];
+  for (let i = 0; i < size; i++) norm += vec[i] * vec[i];
   norm = Math.sqrt(norm);
-  if (norm > 0) for (let i = 0; i < vocabSize; i++) vec[i] /= norm;
-  
+  if (norm > 0) for (let i = 0; i < size; i++) vec[i] /= norm;
   return vec;
 }
 
@@ -1856,9 +1941,549 @@ Route at least 50% of the ₹${fmt(extraNum)} increase to the Fortress, Sir.`;
       return `Financial Health Score: ${overall}/100 — ${label}, Sir.\nCrown's Mandates: ${ns}/100\nImperial Gratuities: ${ws}/100\nFortress Endowments: ${es}/100\n\nWeighted: Mandates 30%, Gratuities 35%, Endowments 35%.`;
     }
 
+    case 'query_tip': {
+      if (I === 0) return `The estate has no income on record yet, Sir. Once you log your salary, I can offer a precise recommendation based on your actual numbers.`;
+      const rN = N/I, rW = W/I, rE = E/I;
+      if (rW > 0.35) return `My counsel: trim the Imperial Gratuities, Sir. You're at ${Math.round(rW*100)}% on wants — that's ${Math.round((rW-0.30)*I)} above the 30% ceiling. Even a modest reduction would compound meaningfully over the year.`;
+      if (rE < 0.15) return `My counsel: the Fortress Endowments need attention, Sir. You're investing only ${Math.round(rE*100)}% — short of the 20% target by ₹${fmt(Math.round((0.20-rE)*I))} this month. Even a small SIP increase closes that gap.`;
+      if (rN > 0.55) return `My counsel: your Crown's Mandates are elevated at ${Math.round(rN*100)}%. If rent is the culprit, that may be worth revisiting — even shifting ₹2,000 toward a smaller flat fee over 12 months adds up to ₹24,000 redirected.`;
+      return `You are in solid shape, Sir — mandates ${Math.round(rN*100)}%, gratuities ${Math.round(rW*100)}%, endowments ${Math.round(rE*100)}%. My counsel: ensure your emergency fund covers 6 months of expenses before increasing discretionary spending.`;
+    }
+
+    case 'query_savings': {
+      if (I === 0) return `No income recorded this month, Sir. Log your salary and I'll compute your precise savings figure.`;
+      const spent = N + W;
+      const saved = I - spent;
+      const saveRate = saved / I;
+      const verdict = saveRate >= 0.20 ? 'commendable' : saveRate >= 0.10 ? 'modest' : 'quite low';
+      return `This month's ledger, Sir:\n\nIncome: ₹${fmt(Math.round(I))}\nSpent (needs + wants): ₹${fmt(Math.round(spent))}\nInvested: ₹${fmt(Math.round(E))}\nNet saved: ₹${fmt(Math.round(saved))}\n\nSavings rate: ${Math.round(saveRate*100)}% — ${verdict}. The target is 20% minimum, Sir.`;
+    }
+
+    case 'query_compare': {
+      const prev = state.prevMonthIncome || 0;
+      if (!prev) return `I have no previous month on record yet, Sir. I'll begin tracking month-over-month from next month once you've used me for a full cycle.`;
+      const diff = I - prev;
+      const sign = diff >= 0 ? '+' : '';
+      return `Month-on-month comparison, Sir:\n\nPrevious income: ₹${fmt(Math.round(prev))}\nThis month income: ₹${fmt(Math.round(I))} (${sign}${fmt(Math.round(diff))})\n\n${diff > 0 ? `Income is up — well done, Sir. Direct the surplus toward the Fortress.` : diff < 0 ? `Income dipped this month — tighten the Gratuities accordingly.` : `Income is steady, Sir.`}`;
+    }
+
+
+    // ── FINANCIAL INTELLIGENCE ───────────────────────────────────────────────
+
+    case 'query_networth': {
+      const nlLoans = getLoans();
+      const nlDebt = nlLoans.reduce((s,l) => s + Math.max(0, l.principal - (l.emi * l.monthsPaid)), 0);
+      const nlAssets = treasury !== null ? treasury : 0;
+      const nlNet = nlAssets - nlDebt;
+      const nlDebtLine = nlLoans.length ? `
+Active obligations outstanding: ₹${fmt(Math.round(nlDebt))}` : `
+No active obligations on record.`;
+      return `Estate Net Worth, Sir:
+
+Liquid assets (Treasury): ₹${fmt(Math.round(nlAssets))}${nlDebtLine}
+
+Net position: ₹${fmt(Math.round(nlNet))} ${nlNet >= 0 ? '— in the black, Sir.' : '— liabilities currently exceed liquid assets.'}
+
+For a complete picture including investments, log all assets in the Ledger.`;
+    }
+
+    case 'query_debt_strategy': {
+      const dsLoans = getLoans();
+      if (!dsLoans.length) return `No obligations on record, Sir — a clean slate. If you acquire debt in future, I'll help you decide whether to eliminate it early or invest the difference.`;
+      const dsHighest = dsLoans.reduce((a,b) => (parseFloat(a.rate)||0) > (parseFloat(b.rate)||0) ? a : b);
+      const dsRate = parseFloat(dsHighest.rate) || 0;
+      if (dsRate > 10) return `Your ${dsHighest.note} carries ${dsRate}% interest — a guaranteed ${dsRate}% return to eliminate it, Sir. Markets rarely beat that reliably. Clear this debt before increasing market investments.`;
+      if (dsRate > 7) return `Your ${dsHighest.note} at ${dsRate}% is a close call, Sir. Equity historically returns 11-13% long term but with risk. A balanced approach — minimum payments plus a modest SIP — serves most people well here.`;
+      return `Your highest obligation rate is ${dsRate}%, Sir — relatively low. Mathematically, investing the difference in equity makes more sense than prepaying. The psychological freedom of being debt-free has real value too — but the numbers favour investing.`;
+    }
+
+    case 'query_goal': {
+      if (I === 0) return `Log your income first, Sir, then ask me something like "how long to save 5 lakhs?" and I'll give you a precise timeline.`;
+      const glSurplus = I - N - W;
+      if (glSurplus <= 0) return `No surplus to direct toward a goal currently, Sir — outflows match income. We'd need to trim Gratuities first.`;
+      const glNums = extractNumbers(text);
+      if (glNums.length) {
+        const glTarget = glNums[0];
+        const glMonths = Math.ceil(glTarget / glSurplus);
+        return `At your current surplus of ₹${fmt(Math.round(glSurplus))}/month, Sir:
+
+Target: ₹${fmt(Math.round(glTarget))}
+Timeline: ${glMonths} months (${(glMonths/12).toFixed(1)} years)
+
+Increase surplus by 20% and you'd reach it in ${Math.ceil(glTarget/(glSurplus*1.2))} months instead.`;
+      }
+      return `Monthly surplus available for goals: ₹${fmt(Math.round(glSurplus))}, Sir. Tell me the target amount — e.g. "how long to save 10 lakhs" — and I'll compute the exact timeline.`;
+    }
+
+    case 'query_expense_breakdown': {
+      if (N + W === 0) return `No expenses recorded yet this month, Sir. Log transactions and I'll show you a full breakdown.`;
+      const ebLines = [];
+      if (I > 0) {
+        if (N > 0) ebLines.push(`Crown's Mandates (Needs):     ₹${fmt(Math.round(N))}  (${Math.round(N/I*100)}%)`);
+        if (W > 0) ebLines.push(`Imperial Gratuities (Wants):  ₹${fmt(Math.round(W))}  (${Math.round(W/I*100)}%)`);
+        if (E > 0) ebLines.push(`Fortress Endowments (Invest): ₹${fmt(Math.round(E))}  (${Math.round(E/I*100)}%)`);
+        const ebUnspent = I - N - W - E;
+        if (ebUnspent > 0) ebLines.push(`Unallocated:                  ₹${fmt(Math.round(ebUnspent))}  (${Math.round(ebUnspent/I*100)}%)`);
+      }
+      return `Expense breakdown this month, Sir:\n\n${ebLines.join('\n')}\n\nOpen the Ledger for full category-level detail.`;
+    }
+
+    case 'query_income_growth': {
+      const igPrev = state.prevMonthIncome || 0;
+      if (!igPrev || !I) return `I need at least two months of income data to show a trend, Sir. Keep logging and I'll track from next month.`;
+      const igGrowth = ((I - igPrev) / igPrev * 100).toFixed(1);
+      return `Income trajectory, Sir:
+
+Last month: ₹${fmt(Math.round(igPrev))}
+This month: ₹${fmt(Math.round(I))}
+Change: ${igGrowth > 0 ? '+' : ''}${igGrowth}%
+
+${I > igPrev ? `Income is climbing. Direct the extra ₹${fmt(Math.round(I-igPrev))} intentionally — don't let lifestyle inflation absorb it silently.` : I < igPrev ? `Income dipped this month. Hold Gratuities tight until it recovers.` : `Steady income — consistency is underrated, Sir.`}`;
+    }
+
+    case 'query_biggest_leak': {
+      if (W === 0 && N === 0) return `No expenses logged yet, Sir. Once you do, I'll identify exactly where the estate is leaking.`;
+      const blRW = I > 0 ? W/I : 0, blRN = I > 0 ? N/I : 0;
+      const blWOver = Math.max(0, blRW - 0.30), blNOver = Math.max(0, blRN - 0.50);
+      if (blWOver > blNOver && blWOver > 0.03) return `Primary leak: Imperial Gratuities at ${Math.round(blRW*100)}% of income — ${Math.round(blWOver*100)} points above the 30% ceiling. That's ₹${fmt(Math.round(blWOver*I))}/month excess — ₹${fmt(Math.round(blWOver*I*12))} annualised, Sir.`;
+      if (blNOver > 0.05) return `Pressure point: Crown's Mandates at ${Math.round(blRN*100)}%. Rent or EMIs are likely the culprit — structural costs are harder to cut but worth examining for renegotiation.`;
+      return `No significant leaks detected, Sir — Mandates ${Math.round(blRN*100)}%, Gratuities ${Math.round(blRW*100)}%. Both within healthy parameters.`;
+    }
+
+    case 'query_emi_impact': {
+      const eiLoans = getLoans();
+      if (!eiLoans.length) return `No active obligations, Sir — income is entirely unencumbered. A position of strength.`;
+      const eiTotal = eiLoans.reduce((s,l) => s + l.emi, 0);
+      const eiPct = I > 0 ? (eiTotal/I*100).toFixed(1) : '?';
+      const eiVerdict = eiPct < 30 ? 'within safe range' : eiPct < 40 ? 'approaching the upper limit' : 'high — worth addressing';
+      return `EMI burden, Sir:\n\nTotal monthly EMIs: ₹${fmt(Math.round(eiTotal))}\nAs % of income: ${eiPct}% — ${eiVerdict}\n\n${eiLoans.map(l=>l.note+': \u20b9'+fmt(l.emi)+'/mo').join('\n')}\n\nRule of thumb: total EMIs should not exceed 35-40% of gross income.`;
+    }
+
+    case 'query_surplus': {
+      if (I === 0) return `Log your income first, Sir, and I'll calculate your surplus immediately.`;
+      const spSurplus = I - N - W - E;
+      if (spSurplus <= 0) return `Income is fully allocated this month, Sir — ₹${fmt(Math.round(I))} in, ₹${fmt(Math.round(N+W+E))} accounted for. No undeployed capital.`;
+      return `Unallocated surplus: ₹${fmt(Math.round(spSurplus))} (${Math.round(spSurplus/I*100)}% of income), Sir.
+
+This capital is idle. If your emergency fund covers 6 months, direct this toward the Fortress Endowments. If not — build the buffer first.`;
+    }
+
+    case 'query_tax_basic': {
+      return `Tax planning essentials, Sir:
+
+80C (₹1.5L limit): PPF, ELSS, EPF, LIC premium, home loan principal — fill this first.
+80D: Health insurance premiums — ₹25,000 self, ₹50,000 for senior parents.
+HRA: Often the largest deduction for salaried individuals — claim it.
+NPS 80CCD(1B): Additional ₹50,000 over the 80C limit — frequently overlooked.
+Home loan interest (24b): Up to ₹2L deduction.
+
+Old vs New regime: New has lower rates but no deductions. If your total deductions exceed ₹3.75L, old regime typically wins.
+
+Tell me your income and I'll help you estimate which regime suits you, Sir.`;
+    }
+
+    // ── BEHAVIOURAL & PSYCHOLOGY ─────────────────────────────────────────────
+
+    case 'query_impulse': {
+      return `A lapse in discipline, Sir — it happens to everyone.
+
+Three steps forward:
+1. Log it honestly — avoidance compounds the problem
+2. Name the trigger: boredom, stress, social pressure? Named, it loses power
+3. Find an equivalent cut elsewhere this month to keep Gratuities in balance
+
+One purchase does not define the estate. How you respond to it does.`;
+    }
+
+    case 'query_lifestyle_inflation': {
+      const liPrev = state.prevMonthIncome || 0;
+      if (!liPrev || !I) return `I need a few months of data to detect lifestyle inflation, Sir. The trap is subtle — expenses rise invisibly alongside income. Keep logging and I'll flag it the moment I see it.`;
+      const liIncGrowth = (I - liPrev) / liPrev;
+      const liSpendRatio = (N + W) / I;
+      if (liIncGrowth > 0.05 && liSpendRatio > 0.85) return `Signs of lifestyle inflation, Sir. Income grew ${Math.round(liIncGrowth*100)}% and spending is running high at ${Math.round(liSpendRatio*100)}% of income. The antidote: when income rises, direct the increment to the Fortress before the Gratuities can absorb it.`;
+      return `No significant lifestyle inflation detected, Sir. Spending hasn't run away with income — a sign of genuine discipline. Keep that ratio intact as earnings grow.`;
+    }
+
+    case 'query_guilt': {
+      return `Financial guilt is a signal, Sir — not a sentence.
+
+It tells you your actions diverged from your values. Which means your values are intact. That matters.
+
+The constructive response is not self-punishment — it is adjustment: log what happened, understand why, make one concrete change going forward.
+
+The estate is not built or destroyed in a single transaction. What specifically happened? Tell me, and we'll address it practically.`;
+    }
+
+    case 'query_motivation': {
+      const motSaved = I > 0 ? Math.max(0, I - N - W) : 0;
+      if (motSaved > 0) return `Let me show you something concrete, Sir.
+
+At your current rate you're preserving ₹${fmt(Math.round(motSaved))}/month — ₹${fmt(Math.round(motSaved*12))}/year. Invested at 12% annually:
+5 years:  ₹${fmt(Math.round(motSaved*12*5.35))}
+10 years: ₹${fmt(Math.round(motSaved*12*17.55))}
+
+Motivation follows action, not the other way round. The numbers are already working for you.`;
+      return `The path to financial freedom is not exciting, Sir — it is consistent. Every budget you hold, every investment you make is a brick. You don't feel a house being built; you feel the weight of laying bricks. Log your income and I'll show you exactly where you stand.`;
+    }
+
+    case 'query_overspend_category': {
+      const ocText = text.toLowerCase();
+      const ocCat = /food|dining|eat|swiggy|zomato/.test(ocText) ? 'food delivery' :
+                    /cloth|shopping|fashion|myntra/.test(ocText) ? 'clothing & shopping' :
+                    /subscri|netflix|streaming/.test(ocText) ? 'subscriptions' :
+                    /entertain|movie|outing/.test(ocText) ? 'entertainment' : 'that category';
+      return `Habitual overspending on ${ocCat}, Sir — the mechanism is rarely greed, it's friction-free access.
+
+Three interventions:
+1. Hard monthly cash envelope for ${ocCat} — when it's gone, it's gone
+2. Add friction — delete the app, unlink the card, enforce a 24-hour wait
+3. Find a cheaper substitute that satisfies the same underlying need
+
+Which sounds workable for you?`;
+    }
+
+    case 'query_habit': {
+      return `The most powerful financial habit, Sir, is also the least glamorous: pay yourself first.
+
+The moment income arrives, move savings and investment amounts before spending begins. Automate it — SIP on salary day, recurring transfer to savings.
+
+Three habits that compound beautifully:
+1. Weekly 10-minute review — log everything, check the pillars
+2. Monthly reset — set next month's targets before it begins
+3. Annual audit — review all subscriptions, insurance, and investment performance
+
+Consistency across modest habits beats intensity across sporadic ones, Sir.`;
+    }
+
+    // ── LIFE EVENTS ───────────────────────────────────────────────────────────
+
+    case 'query_salary_raise': {
+      const srNums = extractNumbers(text);
+      const srRaise = srNums.length ? srNums[0] : null;
+      if (srRaise) return `Congratulations, Sir — a rise well earned.
+
+For the additional ₹${fmt(Math.round(srRaise))}/month:
+Fortress Endowments (50%): ₹${fmt(Math.round(srRaise*0.50))}/mo — increase SIP immediately
+Crown's Mandates (30%):    ₹${fmt(Math.round(srRaise*0.30))}/mo — buffer for genuine need increases
+Imperial Gratuities (20%): ₹${fmt(Math.round(srRaise*0.20))}/mo — a measured lifestyle upgrade
+
+The temptation is to let the full raise flow into lifestyle. Resist it — this is how wealth compounds.`;
+      return `A raise is a rare opportunity, Sir. Direct 50% of the increment to investments, 30% to needs buffer, 20% to a measured lifestyle upgrade. Tell me the amount and I'll give you exact figures.`;
+    }
+
+    case 'query_bonus': {
+      const bnNums = extractNumbers(text);
+      const bnBonus = bnNums.length ? bnNums[0] : null;
+      const bnHighDebt = getLoans().find(l => parseFloat(l.rate) > 10);
+      if (bnBonus && bnHighDebt) return `Bonus of ₹${fmt(Math.round(bnBonus))}, Sir.
+
+Given your ${bnHighDebt.note} at ${bnHighDebt.rate}% interest:
+Clear high-rate debt (60%):        ₹${fmt(Math.round(bnBonus*0.60))}
+Fortress Endowments (30%):         ₹${fmt(Math.round(bnBonus*0.30))}
+A worthy reward (10%):             ₹${fmt(Math.round(bnBonus*0.10))}`;
+      if (bnBonus) return `Bonus of ₹${fmt(Math.round(bnBonus))}, Sir:
+Emergency fund top-up (30%):       ₹${fmt(Math.round(bnBonus*0.30))}
+Fortress Endowments lumpsum (60%): ₹${fmt(Math.round(bnBonus*0.60))}
+A worthy reward (10%):             ₹${fmt(Math.round(bnBonus*0.10))}
+
+Resist upgrading lifestyle with a one-time payment — it creates ongoing expectations.`;
+      return `A bonus is a lump sum — the temptation is to spend it lump-sum too, Sir. Tell me the amount and I'll allocate it precisely across debt, investments, and a measured reward.`;
+    }
+
+    case 'query_job_loss': {
+      const jlBurn = N + W;
+      const jlRunway = jlBurn > 0 && treasury !== null ? (treasury / jlBurn).toFixed(1) : null;
+      return `A difficult moment, Sir — let us be practical.
+
+Immediate triage:
+1. Runway: ${jlRunway ? `₹${fmt(Math.round(treasury||0))} ÷ ₹${fmt(Math.round(jlBurn))}/mo = ${jlRunway} months` : 'Set your treasury balance so I can calculate your runway'}
+2. Suspend all non-essential Gratuities immediately
+3. Pause (not cancel) investments — preserve cash
+4. Identify true minimum burn: rent, food, utilities, medicines only
+
+The Fortress was built for this moment, Sir. How long is your runway?`;
+    }
+
+    case 'query_big_purchase': {
+      const bpNums = extractNumbers(text);
+      const bpPrice = bpNums.length ? bpNums[0] : null;
+      if (bpPrice && I > 0) {
+        const bpSurplus = Math.max(1, I - N - W);
+        const bpMonths = Math.ceil(bpPrice / bpSurplus);
+        const bpAffordable = treasury !== null && bpPrice < treasury * 0.5;
+        return `Purchase analysis — ₹${fmt(Math.round(bpPrice))}, Sir:
+
+${bpAffordable ? `Treasury has cover — affordable without disrupting finances.` : `This is ${bpMonths} months of your current surplus.`}
+
+${bpPrice < I * 2 ? `Manageable as a cash purchase.` : `If financing via EMI, ensure monthly payment stays under 8% of income.`}
+
+Rule of thumb: if it requires more than 3 months of surplus, it warrants a dedicated savings goal rather than an impulse decision.`;
+      }
+      return `Before any major purchase, Sir — three questions:
+1. Does Treasury cover it without wiping the emergency fund?
+2. Does any EMI keep total loan burden under 35% of income?
+3. Would waiting 30 days change your desire for it?
+
+Tell me the amount for a precise affordability verdict.`;
+    }
+
+    case 'query_moving': {
+      const mvNums = extractNumbers(text);
+      const mvRent = mvNums.length ? mvNums[0] : null;
+      if (mvRent && I > 0) {
+        const mvPct = (mvRent/I*100).toFixed(1);
+        const mvVerdict = mvPct < 25 ? 'comfortable' : mvPct < 35 ? 'manageable but tight' : 'high — proceed with caution';
+        return `Relocation analysis, Sir:
+
+New rent ₹${fmt(Math.round(mvRent))} = ${mvPct}% of income — ${mvVerdict}.
+
+Also budget for: moving costs (₹15,000-30,000), security deposit (2-3 months rent), setup costs, and a 2-month adjustment spike.
+
+If the new city has a higher cost of living, build an extra month of buffer before moving.`;
+      }
+      return `Key variables for relocation, Sir: new rent as % of income (aim under 30%), one-time moving costs, security deposit, cost-of-living differential. Tell me the new rent and I'll assess the full impact.`;
+    }
+
+    case 'query_family_expense': {
+      const feText = text.toLowerCase();
+      if (/marr|wedding/.test(feText)) return `Wedding planning, Sir — one of the largest financial events most people face.
+
+Set a firm budget before engaging vendors. Distinguish non-negotiables from nice-to-haves. Never fund celebrations with high-interest debt.
+
+Framework: if the wedding costs more than 6 months of combined income, it warrants a dedicated savings goal started 18+ months prior.`;
+      if (/baby|child|kid|birth/.test(feText)) return `A child changes the financial landscape significantly, Sir.
+
+Immediate: delivery costs, infant supplies (₹30-50K first year), possible income reduction during leave.
+Medium term: increase health insurance, start an education SIP (₹3,000/mo for 18 years at 12% grows substantially).
+Long term: increase term insurance cover now — your obligations have grown.`;
+      if (/parent|mother|father/.test(feText)) return `Supporting parents requires a dedicated line item, Sir — not an afterthought.
+
+Add their expenses to Crown's Mandates. Ensure they have separate health insurance. Have an honest conversation about ongoing support so it can be planned rather than reactive.`;
+      return `Family milestones rarely cost less than expected, Sir. Tell me the specific event — wedding, child, parent support — and I'll give you a precise financial framework.`;
+    }
+
+    case 'query_freelance': {
+      return `Variable income requires a different architecture than a salary, Sir.
+
+Core framework:
+1. Base budget on your lowest recent month — not average, not best
+2. In good months, bank excess into a dedicated income smoothing buffer
+3. Pay yourself a fixed "salary" from that buffer each month
+4. Target 6 months expenses in buffer (vs 3 for salaried)
+
+For taxes: set aside 25-30% of every invoice immediately — freelance has no TDS, so the liability accumulates invisibly.
+
+For investments: SIP at a modest amount you can sustain in lean months. Make lump-sum top-ups in surplus months.`;
+    }
+
+    // ── PRODUCTS & INSTRUMENTS ────────────────────────────────────────────────
+
+    case 'query_sip': {
+      const sipRec = I > 0 ? Math.round(I * 0.20) : null;
+      return `SIP guidance, Sir:
+
+A Systematic Investment Plan automates your entry into mutual funds — fixed amount, fixed date, every month. The discipline is built-in.
+
+${sipRec ? `At your income, a 20% target suggests ₹${fmt(sipRec)}/month.
+
+` : ''}For beginners: Nifty 50 index fund — low cost, broad diversification, hard to beat long-term.
+For builders: add flexi-cap or mid-cap once the index fund has run 12+ months.
+
+Key rules: don't stop SIPs in a downturn (you're buying cheaper), increase by 10% annually with income, never invest money you need within 3 years in equity.`;
+    }
+
+    case 'query_fd_vs_mf': {
+      return `FD vs Mutual Fund depends entirely on purpose, Sir:
+
+Fixed Deposits:
++ Guaranteed returns (6.5-7.5% currently)
++ Zero risk, predictable
+− Often lose to inflation after tax
+− Best for: emergency fund, goals under 3 years
+
+Equity Mutual Funds:
++ 11-13% historical long-term returns
++ Tax efficient (LTCG 10% after ₹1L)
+− Market risk, short-term volatility
+− Best for: goals 5+ years away, wealth building
+
+Verdict: FD for money you cannot afford to lose or need within 3 years. Equity funds for everything else. A liquid fund is a superior FD alternative for your emergency fund — better returns, equally accessible.`;
+    }
+
+    case 'query_gold': {
+      return `Gold's role in the estate, Sir:
+
+Gold is a hedge — it moves differently from equity, protecting the portfolio when markets fall. Not a primary wealth builder; long-term real returns are modest.
+
+Allocation: 5-10% of investment portfolio — no more.
+
+Best forms:
+1. Sovereign Gold Bonds (SGBs): 2.5% annual interest + price appreciation + zero capital gains if held to maturity. Clearly superior.
+2. Gold ETFs: liquid, transparent pricing, no making charges.
+3. Physical gold: sentimental value, but storage risk and making charges make it poor as pure investment.
+
+If you hold no gold yet, SGBs at next tranche opening. If you hold physical gold, that covers your allocation.`;
+    }
+
+    case 'query_credit_card': {
+      return `Credit card wisdom, Sir — the tool is neutral, the behaviour determines outcome.
+
+Golden rules:
+1. Pay full statement balance every month — not minimum due. The interest (36-42% annualised) is catastrophic.
+2. Keep utilisation under 30% of limit — above that, it damages your credit score.
+3. Treat it as a debit card with rewards. Never spend what you don't already have.
+4. One or two cards maximum.
+
+Used correctly: credit score building, cashback, purchase protection, 45-day interest-free float.
+
+Most dangerous phrase in personal finance: "I'll pay the minimum this month." That is how ₹10,000 becomes ₹18,000 in a year, Sir.`;
+    }
+
+    case 'query_insurance': {
+      const insAnnual = I * 12;
+      const insCover = insAnnual > 0 ? `₹${fmt(Math.round(insAnnual * 10))} (10x annual income)` : `₹1 crore minimum`;
+      return `Insurance architecture, Sir:
+
+Term Life:
+Cover needed: ${insCover}
+What to buy: pure term plan only — no ULIP, no endowment. Those do both jobs poorly.
+
+Health Insurance:
+Minimum: ₹5L individual, ₹10L family floater
+Add a super top-up of ₹50L — costs little, protects against catastrophic bills
+Parents: separate policy — age makes them expensive in your floater
+
+Buy insurance when young and healthy, Sir. Waiting makes it costlier or unavailable.`;
+    }
+
+    // ── WIKIPEDIA FALLBACK ────────────────────────────────────────────────────
+
+    case 'wiki_finance_term':
+    case 'wiki_concept':
+    case 'wiki_product':
+    case 'wiki_regulation':
+    case 'wiki_general': {
+      _fetchWiki(text); // async — returns placeholder, updates bubble when done
+      return `One moment, Sir — consulting the archives...`;
+    }
     default:
       return null;
   }
+}
+
+// ── WIKIPEDIA FETCHER ──────────────────────────────────────────────────────
+// Extracts the key topic from user text and fetches a plain-English summary.
+// Returns a placeholder immediately; updates the last Scott bubble when done.
+
+function _extractWikiTerm(text) {
+  const t = text.toLowerCase()
+    .replace(/\b(what is|what are|what does|explain|define|tell me about|how does|meaning of|what do you mean by)\b/gi, '')
+    .replace(/[?.,!]/g, '')
+    .trim();
+  // Take first 4 significant words
+  return t.split(/\s+/).slice(0, 4).join(' ').trim();
+}
+
+async function _fetchWiki(text) {
+  const term = _extractWikiTerm(text);
+  if (!term) return;
+  const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('not found');
+    const data = await r.json();
+    const extract = data.extract || data.description || 'No summary available.';
+    const short = extract.length > 600 ? extract.slice(0, 600) + '…' : extract;
+    // Update the last Scott bubble (the placeholder "consulting the archives...")
+    const chat = document.getElementById('chat');
+    const bubbles = chat.querySelectorAll('.msg.scott .msg-bubble');
+    const last = bubbles[bubbles.length - 1];
+    if (last && last.textContent.includes('consulting the archives')) {
+      last.textContent = '';
+      _typewrite(last, `From the archives, Sir — on "${data.title || term}":\n\n${short}\n\nThis is from Wikipedia. For financial decisions, always verify with a qualified advisor.`);
+    }
+  } catch(e) {
+    const chat = document.getElementById('chat');
+    const bubbles = chat.querySelectorAll('.msg.scott .msg-bubble');
+    const last = bubbles[bubbles.length - 1];
+    if (last && last.textContent.includes('consulting the archives')) {
+      last.textContent = '';
+      _typewrite(last, `I wasn't able to locate "${term}" in the archives, Sir. Could you rephrase or be more specific?`);
+    }
+  }
+}
+
+// ── PROACTIVE ENGINE ───────────────────────────────────────────────────────
+// Runs silently after every transaction. Fires at most one alert per event.
+// Returns a string (alert message) or null (silent).
+
+function runProactiveEngine(txn, state) {
+  const I = state.income || 0;
+  const N = state.needs  || 0;
+  const W = state.wants  || 0;
+  const E = state.investing || 0;
+  if (I === 0) return null; // no income logged yet — stay silent
+
+  // ── 1. LARGE TRANSACTION ALERT ────────────────────────────────────────────
+  // Fires when a single transaction exceeds 15% of monthly income
+  if (txn.amount > 0 && txn.type !== 'income' && txn.amount > I * 0.15) {
+    const pct = Math.round(txn.amount / I * 100);
+    return `A notable outflow, Sir — ₹${fmt(Math.round(txn.amount))} (${pct}% of monthly income) just logged for "${humanize(txn.sub_category)}". If this was planned, carry on. If not, it may be worth reviewing.`;
+  }
+
+  // ── 2. BUDGET THRESHOLD ALERTS ────────────────────────────────────────────
+  // Fires when a pillar crosses its target percentage
+  const rW = W / I, rN = N / I;
+  if (txn.type === 'wants' && rW > 0.30 && rW - (txn.amount/I) <= 0.30) {
+    return `Imperial Gratuities have crossed the 30% threshold, Sir — now at ${Math.round(rW*100)}% of income. Any further discretionary spending this month will widen the deviation.`;
+  }
+  if (txn.type === 'needs' && rN > 0.50 && rN - (txn.amount/I) <= 0.50) {
+    return `Crown's Mandates have crossed the 50% threshold, Sir — now at ${Math.round(rN*100)}% of income. Likely a structural cost rather than a controllable one, but worth noting.`;
+  }
+
+  // ── 3. SPEND VELOCITY ALERT ───────────────────────────────────────────────
+  // Fires when total spending in current month is on pace to exceed income
+  const totalSpent = N + W;
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+  const dayOfMonth = today.getDate();
+  const projectedMonthly = (totalSpent / dayOfMonth) * daysInMonth;
+  if (dayOfMonth > 5 && projectedMonthly > I * 0.85) {
+    const projPct = Math.round(projectedMonthly / I * 100);
+    // Only fire this once — check a flag in state
+    if (!state.velocityAlertFired) {
+      state.velocityAlertFired = true;
+      saveState(state);
+      return `Spend velocity alert, Sir — at the current pace, Mandates + Gratuities are projected to reach ${projPct}% of income by month-end. There is still time to course-correct.`;
+    }
+  }
+
+  // ── 4. IDLE CASH OPPORTUNITY ──────────────────────────────────────────────
+  // Fires once when treasury is high relative to expenses and investing is low
+  const treasury = getTreasury();
+  const monthlyBurn = N + W;
+  if (treasury > monthlyBurn * 9 && E < I * 0.10 && !state.idleCashAlertFired) {
+    state.idleCashAlertFired = true;
+    saveState(state);
+    const months = (treasury / Math.max(1, monthlyBurn)).toFixed(0);
+    return `The Treasury holds ${months} months of expenses, Sir — well above the 6-month buffer. The excess is idle. Might I suggest deploying ₹${fmt(Math.round(treasury - monthlyBurn*6))} into the Fortress Endowments?`;
+  }
+
+  // ── 5. SUBSCRIPTION DETECTOR ──────────────────────────────────────────────
+  // Detects if subscription-category spending is above ₹1,500/month
+  const txns = JSON.parse(localStorage.getItem('scott_transactions') || '[]');
+  const thisMonth = getMonthKey();
+  const subKeywords = /netflix|spotify|hotstar|prime|zee5|jiocinema|youtube premium|apple music|gamepass|adobe|notion|canva|subscri/i;
+  const subTotal = txns
+    .filter(t => t.month === thisMonth && subKeywords.test(t.sub_category + ' ' + t.note))
+    .reduce((s, t) => s + t.amount, 0);
+  if (subTotal > 1500 && subKeywords.test(txn.sub_category + ' ' + (txn.note||'')) && !state.subAlertFired) {
+    state.subAlertFired = true;
+    saveState(state);
+    return `Subscription tracker, Sir — recurring services have totalled ₹${fmt(Math.round(subTotal))} this month. Worth a quick audit: are all of these actively used?`;
+  }
+
+  return null; // nothing to report
 }
 
 // ── MAIN INTENT ROUTER ─────────────────────────────────────────────────────
@@ -1885,41 +2510,61 @@ function hardKeywordRoute(text) {
 }
 
 function routeInput(text) {
-  // Step 0: If text looks like a question/what-if, bypass transaction parsing entirely
-  // Catches: "what if X", "how should I", "how much will", "should I", "am I", "is my"
-  const QUERY_SIGNALS = /^(what\s+if|how\s+should|how\s+much\s+will|should\s+i|where\s+should|when\s+should|am\s+i|is\s+my|i\s+got\s+a\s+raise|i\s+got\s+a\s+bonus.*allocate|how.*allocate|what.*my.*score|rate\s+my|what\s+kind|how\s+aggressive|tell\s+me.*invest|project\s+my|forecast|how.*fast)/i;
-  if (QUERY_SIGNALS.test(text.trim())) {
-    // Don't parse as transaction — fall through to intelligence/keyword routing
-  } else {
-    // If text parses as a valid transaction, prefer transaction over ML routing
-    const quickParse = parseTransaction(text);
-    if (quickParse) return null;
+  const t = text.trim();
+
+  // ── GATE: Is this clearly a transaction? ────────────────────────────────
+  // If the user isn't asking a question and the parser can read it, log it.
+  const looksLikeQuery = /^(what\s+if|how\s+should|how\s+much\s+will|should\s+i|where\s+should|when\s+should|am\s+i|is\s+my|i\s+got\s+a\s+(raise|bonus)|how.*allocate|what.*score|rate\s+my|what\s+kind|how\s+aggressive|tell\s+me.*invest|project\s+my|forecast|how.*fast|why\s+is|what.*happen|can\s+i|will\s+i|give\s+me|explain|show\s+me)/i.test(t);
+
+  if (!looksLikeQuery) {
+    const quickParse = parseTransaction(t);
+    if (quickParse) return null; // it's a transaction — let handleSend deal with it
   }
 
-  // Step 1: Try hardcoded keyword router first (always reliable)
-  const hardIntent = hardKeywordRoute(text);
+  // ── STEP 1: ML model (when loaded) — primary brain ──────────────────────
+  if (BRAIN) {
+    const result = classifyIntent(t);
+    const { intent, confidence, all } = result;
+
+    // Hard reject: model is sure it's a transaction or chit-chat
+    if (intent === 'log_transaction' && confidence > 0.55) return null;
+    if (intent === 'small_talk'      && confidence > 0.55) return null;
+
+    // Accept ML result when confident enough
+    if (confidence >= 0.38 && intent !== 'log_transaction' && intent !== 'small_talk') {
+      const state = loadState();
+      const reply = analyseIntent(intent, t, state);
+      if (reply) return reply;
+    }
+
+    // If ML is uncertain (0.25–0.37), try hard rules as a tiebreaker
+    if (confidence >= 0.25) {
+      const hardIntent = hardKeywordRoute(t);
+      if (hardIntent) {
+        const state = loadState();
+        return analyseIntent(hardIntent, t, state);
+      }
+      // ML was uncertain but picked something non-transaction — still use it
+      if (intent !== 'log_transaction' && intent !== 'small_talk') {
+        const state = loadState();
+        const reply = analyseIntent(intent, t, state);
+        if (reply) return reply;
+      }
+    }
+
+    return null; // ML said it's a transaction or was too uncertain
+  }
+
+  // ── STEP 2: No model loaded — fall back to keyword rules ────────────────
+  const hardIntent = hardKeywordRoute(t);
   if (hardIntent) {
     const state = loadState();
-    return analyseIntent(hardIntent, text, state);
+    return analyseIntent(hardIntent, t, state);
   }
 
-  // Step 2: Try ML model if loaded
-  if (BRAIN) {
-    const result = classifyIntent(text);
-    const {intent, confidence} = result;
-    if (intent === 'log_transaction') return null;
-    if (intent === 'small_talk') return null;
-    if (confidence < 0.30) return null; // too uncertain, let parser try
-    const state = loadState();
-    return analyseIntent(intent, text, state);
-  }
-
-  // Step 3: Fallback keyword router (broader, for when model not loaded)
-  const result = fallbackIntent(text);
-  const {intent, confidence} = result;
-  if (intent === 'log_transaction') return null;
-  if (intent === 'small_talk') return null;
+  const result = fallbackIntent(t);
+  const { intent, confidence } = result;
+  if (intent === 'log_transaction' || intent === 'small_talk') return null;
   const state = loadState();
-  return analyseIntent(intent, text, state);
+  return analyseIntent(intent, t, state);
 }
-
