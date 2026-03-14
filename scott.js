@@ -221,6 +221,10 @@ function smartDisambiguate(text) {
   const amount = parseAmount(text);
   const type = detectType(text);
 
+  // If hardKeywordRoute recognises this (wiki, status, etc.) — don't disambiguate
+  // This catches "whats sip", "what's inflation", bare known terms etc.
+  if (hardKeywordRoute(text)) return null;
+
   // Known investment/finance keyword alone → ask for amount
   const INVEST_KW = /\b(invest(?:ment|ed|ing)?|sip\b|stocks?|shares?|mutual\s*funds?|crypto|gold\b|fd\b|ppf\b|nps\b|mf\b|portfolio|endowment|fortress)\b/i;
   if (!amount && INVEST_KW.test(t)) {
@@ -509,8 +513,10 @@ async function handleSend(){
     // Wiki intents return a signal string — show placeholder first, then fetch
     if(intelligenceReply.startsWith('__WIKI__:')){
       const wikiQuery = intelligenceReply.slice(9);
-      const wikiDiv = appendMsg('scott', 'One moment, Sir \u2014 consulting the archives\u2026');
+      const wikiDiv = appendMsg('scott', '');
       const wikiBubble = wikiDiv.querySelector('.msg-bubble');
+      // Set placeholder as plain text — no typeMsg so _fetchWiki won't race it
+      wikiBubble.textContent = 'One moment, Sir \u2014 consulting the archives\u2026';
       _fetchWiki(wikiQuery, wikiBubble);
     } else {
       appendMsg('scott',intelligenceReply);
@@ -520,6 +526,24 @@ async function handleSend(){
 
   // ── Layer 6: Smart disambiguation — smarter than "I don't understand" ───
   const disambig=smartDisambiguate(text);
+  if(!disambig){
+    // smartDisambiguate bailed — hardKeywordRoute matched, route it properly
+    const hardIntent = hardKeywordRoute(text);
+    if(hardIntent){
+      if(hardIntent === 'wiki_general' || hardIntent === 'wiki_finance_term' || hardIntent === 'wiki_concept' || hardIntent === 'wiki_product' || hardIntent === 'wiki_regulation'){
+        const wikiDiv2 = appendMsg('scott','');
+        const wikiBubble2 = wikiDiv2.querySelector('.msg-bubble');
+        wikiBubble2.textContent = 'One moment, Sir \u2014 consulting the archives\u2026';
+        _fetchWiki(text, wikiBubble2);
+      } else {
+        const st2 = loadState();
+        const reply2 = analyseIntent(hardIntent, text, st2);
+        if(reply2) appendMsg('scott', reply2);
+      }
+      ctxPush(text,null,'query');_enable();return;
+    }
+    _enable();return;
+  }
   appendMsg('scott',disambig);
   ctxPush(text,null,'disambig');
   _enable();
@@ -2492,7 +2516,13 @@ function runProactiveEngine(txn, state) {
 // ── MAIN INTENT ROUTER ─────────────────────────────────────────────────────
 function hardKeywordRoute(text) {
   // Always-on keyword router — works even if model fails to load
-  const t = text.toLowerCase();
+  // Normalise contractions so "what's" = "what is", "whats" = "what is"
+  const t = text.toLowerCase()
+    .replace(/what's\b/g, 'what is')
+    .replace(/\bwhats\b/g, 'what is')
+    .replace(/how's\b/g, 'how is')
+    .replace(/\bhows\b/g, 'how is');
+
   // Must NOT be a transaction — skip if it has amount-like patterns
   const hasAmount = /\b(\d+k?\b|lakh|crore|₹|rs\b)/.test(t);
   const isObviousTransaction = /^(spent|paid|bought|got salary|received|invested|sent \d|filled|ordered|donated|medicine|coffee|uber|petrol)/.test(t);
