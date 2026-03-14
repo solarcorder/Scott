@@ -2592,19 +2592,13 @@ function routeInput(text) {
     const result = classifyIntent(t);
     const { intent, confidence } = result;
 
-    // Hard reject: model is sure it's a transaction or chit-chat
+    // Hard reject: model is sure it's a transaction or small talk
     if (intent === 'log_transaction' && confidence > 0.55) return null;
     if (intent === 'small_talk'      && confidence > 0.55) return null;
 
-    // Accept ML result when confident enough
-    if (confidence >= 0.38 && intent !== 'log_transaction' && intent !== 'small_talk') {
-      const state = loadState();
-      const reply = analyseIntent(intent, t, state);
-      if (reply) return reply;
-    }
-
-    // ML uncertain but non-transaction — still use it
-    if (confidence >= 0.25 && intent !== 'log_transaction' && intent !== 'small_talk') {
+    // With 45 intents, probability spreads thin — trust top prediction
+    // as long as it isn't a transaction or small talk
+    if (intent !== 'log_transaction' && intent !== 'small_talk') {
       const state = loadState();
       const reply = analyseIntent(intent, t, state);
       if (reply) return reply;
