@@ -510,13 +510,9 @@ async function handleSend(){
   // ── Layer 5: Intelligence routing (questions, analysis) ─────────────────
   const intelligenceReply=routeInput(text);
   if(intelligenceReply){
-    // Wiki intents return a signal string — show placeholder first, then fetch
     if(intelligenceReply.startsWith('__WIKI__:')){
       const wikiQuery = intelligenceReply.slice(9);
-      const wikiDiv = appendMsg('scott', '');
-      const wikiBubble = wikiDiv.querySelector('.msg-bubble');
-      // Set placeholder as plain text — no typeMsg so _fetchWiki won't race it
-      wikiBubble.textContent = 'One moment, Sir \u2014 consulting the archives\u2026';
+      const wikiBubble = _appendWikiPlaceholder();
       _fetchWiki(wikiQuery, wikiBubble);
     } else {
       appendMsg('scott',intelligenceReply);
@@ -531,9 +527,7 @@ async function handleSend(){
     const hardIntent = hardKeywordRoute(text);
     if(hardIntent){
       if(hardIntent === 'wiki_general' || hardIntent === 'wiki_finance_term' || hardIntent === 'wiki_concept' || hardIntent === 'wiki_product' || hardIntent === 'wiki_regulation'){
-        const wikiDiv2 = appendMsg('scott','');
-        const wikiBubble2 = wikiDiv2.querySelector('.msg-bubble');
-        wikiBubble2.textContent = 'One moment, Sir \u2014 consulting the archives\u2026';
+        const wikiBubble2 = _appendWikiPlaceholder();
         _fetchWiki(text, wikiBubble2);
       } else {
         const st2 = loadState();
@@ -2406,16 +2400,41 @@ Buy insurance when young and healthy, Sir. Waiting makes it costlier or unavaila
 }
 
 // ── WIKIPEDIA FETCHER ──────────────────────────────────────────────────────
+
+// Creates a Scott message bubble with a static placeholder — no typeMsg,
+// no race condition. Returns the bubble element directly.
+function _appendWikiPlaceholder() {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg scott';
+  if (_undoGroupId) div.dataset.gid = _undoGroupId;
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = 'Scott';
+  div.appendChild(label);
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.textContent = 'One moment, Sir \u2014 consulting the archives\u2026';
+  div.appendChild(bubble);
+  const rule = document.createElement('div');
+  rule.className = 'msg-rule';
+  div.appendChild(rule);
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return bubble; // direct reference — no querySelector needed
+}
 // Extracts the key topic from user text and fetches a plain-English summary.
 // Returns a placeholder immediately; updates the last Scott bubble when done.
 
 function _extractWikiTerm(text) {
   const t = text.toLowerCase()
-    .replace(/\b(what is|what are|what does|explain|define|tell me about|how does|meaning of|what do you mean by)\b/gi, '')
+    .replace(/what's\b/g, 'what is')
+    .replace(/\bwhats\b/g, 'what is')
+    .replace(/\b(what is|what are|what does|what do|explain|define|tell me about|how does|meaning of|what do you mean by|how is|how are)\b/gi, '')
     .replace(/[?.,!]/g, '')
+    .replace(/^\s*(a|an|the)\s+/i, '') // strip leading articles
     .trim();
-  // Take first 4 significant words
-  return t.split(/\s+/).slice(0, 4).join(' ').trim();
+  return t.split(/\s+/).filter(Boolean).slice(0, 4).join(' ');
 }
 
 async function _fetchWiki(text, bubble) {
