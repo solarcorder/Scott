@@ -2520,7 +2520,6 @@ function routeInput(text) {
   const t = text.trim();
 
   // ── GATE: Is this clearly a transaction? ────────────────────────────────
-  // If the user isn't asking a question and the parser can read it, log it.
   const looksLikeQuery = /^(what\s+if|how\s+should|how\s+much\s+will|should\s+i|where\s+should|when\s+should|am\s+i|is\s+my|i\s+got\s+a\s+(raise|bonus)|how.*allocate|what.*score|rate\s+my|what\s+kind|how\s+aggressive|tell\s+me.*invest|project\s+my|forecast|how.*fast|why\s+is|what.*happen|can\s+i|will\s+i|give\s+me|explain|show\s+me)/i.test(t);
 
   if (!looksLikeQuery) {
@@ -2528,10 +2527,18 @@ function routeInput(text) {
     if (quickParse) return null; // it's a transaction — let handleSend deal with it
   }
 
+  // ── STEP 0: Hard keyword rules — always checked first, beats ML ─────────
+  // This ensures wiki queries, what-if, etc. always route correctly
+  const hardFirst = hardKeywordRoute(t);
+  if (hardFirst) {
+    const state = loadState();
+    return analyseIntent(hardFirst, t, state);
+  }
+
   // ── STEP 1: ML model (when loaded) — primary brain ──────────────────────
   if (BRAIN) {
     const result = classifyIntent(t);
-    const { intent, confidence, all } = result;
+    const { intent, confidence } = result;
 
     // Hard reject: model is sure it's a transaction or chit-chat
     if (intent === 'log_transaction' && confidence > 0.55) return null;
@@ -2544,31 +2551,17 @@ function routeInput(text) {
       if (reply) return reply;
     }
 
-    // If ML is uncertain (0.25–0.37), try hard rules as a tiebreaker
-    if (confidence >= 0.25) {
-      const hardIntent = hardKeywordRoute(t);
-      if (hardIntent) {
-        const state = loadState();
-        return analyseIntent(hardIntent, t, state);
-      }
-      // ML was uncertain but picked something non-transaction — still use it
-      if (intent !== 'log_transaction' && intent !== 'small_talk') {
-        const state = loadState();
-        const reply = analyseIntent(intent, t, state);
-        if (reply) return reply;
-      }
+    // ML uncertain but non-transaction — still use it
+    if (confidence >= 0.25 && intent !== 'log_transaction' && intent !== 'small_talk') {
+      const state = loadState();
+      const reply = analyseIntent(intent, t, state);
+      if (reply) return reply;
     }
 
-    return null; // ML said it's a transaction or was too uncertain
+    return null;
   }
 
-  // ── STEP 2: No model loaded — fall back to keyword rules ────────────────
-  const hardIntent = hardKeywordRoute(t);
-  if (hardIntent) {
-    const state = loadState();
-    return analyseIntent(hardIntent, t, state);
-  }
-
+  // ── STEP 2: No model — fallback intent ──────────────────────────────────
   const result = fallbackIntent(t);
   const { intent, confidence } = result;
   if (intent === 'log_transaction' || intent === 'small_talk') return null;
