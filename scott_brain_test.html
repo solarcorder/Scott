@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scott Brain — Intent Classifier Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Georgia', serif;
+    background: #f5f0e8;
+    color: #2c2416;
+    min-height: 100vh;
+    padding: 32px 16px;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 28px;
+    font-style: italic;
+  }
+  .status-bar {
+    background: #fff8ee;
+    border: 1px solid #ddd3be;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 13px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ccc;
+    flex-shrink: 0;
+  }
+  .dot.green { background: #4caf50; }
+  .dot.orange { background: #ff9800; animation: pulse 1s infinite; }
+  .dot.red { background: #f44336; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Input area */
+  .input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  input[type="text"] {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 15px;
+    font-family: inherit;
+    border: 1px solid #c8bfaa;
+    border-radius: 6px;
+    background: #fff;
+    outline: none;
+    color: #2c2416;
+  }
+  input[type="text"]:focus { border-color: #8b7355; }
+  button {
+    padding: 12px 20px;
+    background: #2c2416;
+    color: #f5f0e8;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+  }
+  button:hover { background: #3d3220; }
+  button:disabled { background: #999; cursor: not-allowed; }
+
+  /* Batch input */
+  .section-title {
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 10px;
+    margin-top: 28px;
+  }
+  textarea {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 13px;
+    font-family: 'Courier New', monospace;
+    border: 1px solid #c8bfaa;
+    border-radius: 6px;
+    background: #fff;
+    outline: none;
+    color: #2c2416;
+    resize: vertical;
+    min-height: 120px;
+  }
+  textarea:focus { border-color: #8b7355; }
+  .batch-btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    margin-bottom: 24px;
+  }
+  .btn-secondary {
+    background: #f5f0e8;
+    color: #2c2416;
+    border: 1px solid #c8bfaa;
+  }
+  .btn-secondary:hover { background: #ede6d8; }
+
+  /* Results */
+  .result-card {
+    background: #fff;
+    border: 1px solid #ddd3be;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .result-query {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 8px;
+    font-style: italic;
+  }
+  .result-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .intent-badge {
+    font-size: 14px;
+    font-weight: 600;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: #2c2416;
+    color: #f5f0e8;
+    letter-spacing: 0.03em;
+  }
+  .intent-badge.low { background: #c0392b; }
+  .intent-badge.mid { background: #e67e22; }
+  .intent-badge.high { background: #27ae60; }
+  .conf-text {
+    font-size: 13px;
+    color: #666;
+  }
+  /* Bar chart for top intents */
+  .bars { display: flex; flex-direction: column; gap: 5px; }
+  .bar-row {
+    display: grid;
+    grid-template-columns: 180px 1fr 48px;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .bar-label { color: #555; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { background: #f0e8dc; border-radius: 3px; height: 8px; }
+  .bar-fill { height: 8px; border-radius: 3px; background: #8b7355; transition: width 0.3s ease; }
+  .bar-fill.top1 { background: #2c2416; }
+  .bar-pct { color: #888; font-size: 11px; }
+
+  /* Batch results table */
+  .batch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-top: 16px;
+  }
+  .batch-table th {
+    text-align: left;
+    padding: 8px 12px;
+    background: #2c2416;
+    color: #f5f0e8;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    font-size: 11px;
+    text-transform: uppercase;
+  }
+  .batch-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #ede6d8;
+  }
+  .batch-table tr:last-child td { border-bottom: none; }
+  .batch-table tr:hover td { background: #faf7f2; }
+  .pass { color: #27ae60; font-weight: 600; }
+  .fail { color: #c0392b; font-weight: 600; }
+  .score-summary {
+    background: #fff8ee;
+    border: 1px solid #ddd3be;
+    border-radius: 6px;
+    padding: 12px 16px;
+    font-size: 14px;
+    margin-top: 12px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .score-item strong { font-size: 20px; }
+
+  .divider { height: 1px; background: #ddd3be; margin: 28px 0; }
+  .empty { color: #aaa; font-size: 14px; font-style: italic; text-align: center; padding: 24px; }
+
+  /* Confidence colour helpers */
+  .c-high { color: #27ae60; }
+  .c-mid  { color: #e67e22; }
+  .c-low  { color: #c0392b; }
+</style>
+</head>
+<body>
+
+<h1>Scott Brain · Intent Classifier Test</h1>
+<p class="subtitle">v3 · 45 intents · 1143 training examples</p>
+
+<div class="status-bar">
+  <div class="dot orange" id="status-dot"></div>
+  <span id="status-text">Loading model from GitHub…</span>
+</div>
+
+<!-- Single input -->
+<div class="section-title">Single Test</div>
+<div class="input-row">
+  <input type="text" id="single-input" placeholder="Type anything — 'what is inflation', 'spent 500 on lunch', 'am i doing okay'…" disabled />
+  <button id="single-btn" disabled onclick="runSingle()">Classify</button>
+</div>
+<div id="single-result"></div>
+
+<div class="divider"></div>
+
+<!-- Batch input -->
+<div class="section-title">Batch Test — one sentence per line</div>
+<textarea id="batch-input" placeholder="spent 500 on groceries
+what is inflation
+am i saving enough
+got salary 45000
+explain compound interest
+how am i doing
+i got a raise
+should i start a sip
+what if i invest more
+i feel guilty about my spending" disabled></textarea>
+<div class="batch-btn-row">
+  <button id="batch-btn" disabled onclick="runBatch()">Run Batch</button>
+  <button class="btn-secondary" onclick="loadSample()">Load Sample Inputs</button>
+  <button class="btn-secondary" onclick="clearBatch()">Clear</button>
+</div>
+<div id="batch-result"></div>
+
+<script>
+// ── MODEL ──────────────────────────────────────────────────────────────
+let BRAIN = null;
+
+async function loadModel() {
+  const dot = document.getElementById('status-dot');
+  const txt = document.getElementById('status-text');
+  try {
+    // Try GitHub Pages URL first, then relative
+    const urls = [
+      'https://solarcorder.github.io/Scott/scott_model.json',
+      './scott_model.json'
+    ];
+    let loaded = false;
+    for (const url of urls) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) continue;
+        BRAIN = await r.json();
+        loaded = true;
+        break;
+      } catch(e) { continue; }
+    }
+    if (!loaded) throw new Error('Could not fetch model from any URL');
+
+    dot.className = 'dot green';
+    txt.textContent = `Model loaded · v${BRAIN.version} · ${BRAIN.trained_on} examples · ${BRAIN.n_intents} intents · vocab ${Object.keys(BRAIN.vocab).length.toLocaleString()} tokens`;
+    document.getElementById('single-input').disabled = false;
+    document.getElementById('single-btn').disabled = false;
+    document.getElementById('batch-input').disabled = false;
+    document.getElementById('batch-btn').disabled = false;
+    document.getElementById('single-input').focus();
+  } catch(e) {
+    dot.className = 'dot red';
+    txt.textContent = `Failed to load model: ${e.message}. Make sure scott_model.json is accessible.`;
+  }
+}
+
+// ── CLASSIFIER (same as scott.js) ─────────────────────────────────────
+function tokenize(text, mode, ngram) {
+  const t = text.toLowerCase().replace(/[^\w\s%]/g, ' ');
+  const [lo, hi] = ngram;
+  if (mode === 'word') {
+    const words = t.match(/\b[a-zA-Z0-9%]+\b/g) || [];
+    const tokens = [...words];
+    for (let n = 2; n <= hi; n++)
+      for (let i = 0; i <= words.length - n; i++)
+        tokens.push(words.slice(i, i+n).join(' '));
+    return tokens;
+  }
+  if (mode === 'char') {
+    const words = t.split(/\s+/).filter(Boolean);
+    const tokens = [];
+    for (const w of words) {
+      const padded = ' ' + w + ' ';
+      for (let n = lo; n <= hi; n++)
+        for (let i = 0; i <= padded.length - n; i++)
+          tokens.push(padded.slice(i, i+n));
+    }
+    return tokens;
+  }
+  return [];
+}
+
+function tfidfVector(text, model) {
+  const mode = model.feature_mode || 'word';
+  if (mode === 'word_char') {
+    const nWord = model.word_n;
+    const nChar = model.idf.length - nWord;
+    const wordTokens = tokenize(text, 'word', model.word_ngram || [1,2]);
+    const charTokens = tokenize(text, 'char', model.char_ngram || [2,4]);
+    const wTf = {};
+    wordTokens.forEach(t => { wTf[t] = (wTf[t]||0)+1; });
+    const wVec = new Float32Array(nWord);
+    Object.entries(wTf).forEach(([tok,count]) => {
+      const idx = model.vocab[tok];
+      if (idx !== undefined && idx < nWord)
+        wVec[idx] = (1+Math.log(count)) * model.idf[idx];
+    });
+    let wNorm = 0;
+    for (let i = 0; i < nWord; i++) wNorm += wVec[i]*wVec[i];
+    wNorm = Math.sqrt(wNorm);
+    if (wNorm > 0) for (let i = 0; i < nWord; i++) wVec[i] /= wNorm;
+    const cTf = {};
+    charTokens.forEach(t => { cTf[t] = (cTf[t]||0)+1; });
+    const cVec = new Float32Array(nChar);
+    Object.entries(cTf).forEach(([tok,count]) => {
+      const idx = model.vocab[tok];
+      if (idx !== undefined && idx >= nWord)
+        cVec[idx-nWord] = (1+Math.log(count)) * model.idf[idx];
+    });
+    let cNorm = 0;
+    for (let i = 0; i < nChar; i++) cNorm += cVec[i]*cVec[i];
+    cNorm = Math.sqrt(cNorm);
+    if (cNorm > 0) for (let i = 0; i < nChar; i++) cVec[i] /= cNorm;
+    const merged = new Float32Array(nWord+nChar);
+    merged.set(wVec,0); merged.set(cVec,nWord);
+    return merged;
+  }
+  const words = tokenize(text,'word',[1,2]);
+  const tf = {};
+  words.forEach(t => { tf[t]=(tf[t]||0)+1; });
+  const size = Object.keys(model.vocab).length;
+  const vec = new Float32Array(size);
+  Object.entries(tf).forEach(([tok,count]) => {
+    const idx = model.vocab[tok];
+    if (idx !== undefined)
+      vec[idx] = (model.sublinear_tf ? 1+Math.log(count) : count) * model.idf[idx];
+  });
+  let norm = 0;
+  for (let i = 0; i < size; i++) norm += vec[i]*vec[i];
+  norm = Math.sqrt(norm);
+  if (norm > 0) for (let i = 0; i < size; i++) vec[i] /= norm;
+  return vec;
+}
+
+function softmax(logits) {
+  const max = Math.max(...logits);
+  const exp = logits.map(x => Math.exp(x-max));
+  const sum = exp.reduce((a,b)=>a+b,0);
+  return exp.map(x => x/sum);
+}
+
+function classify(text) {
+  const vec = tfidfVector(text, BRAIN);
+  const logits = BRAIN.coef.map((row,c) => {
+    let dot = BRAIN.intercept[c];
+    for (let i = 0; i < row.length; i++) dot += row[i]*vec[i];
+    return dot;
+  });
+  const probs = softmax(logits);
+  const sorted = BRAIN.classes
+    .map((c,i) => ({intent:c, prob:probs[i]}))
+    .sort((a,b) => b.prob-a.prob);
+  return sorted;
+}
+
+// ── SINGLE TEST ────────────────────────────────────────────────────────
+document.getElementById('single-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runSingle();
+});
+
+function runSingle() {
+  const text = document.getElementById('single-input').value.trim();
+  if (!text || !BRAIN) return;
+  const results = classify(text);
+  const top = results[0];
+  const conf = top.prob;
+  const confClass = conf >= 0.50 ? 'high' : conf >= 0.30 ? 'mid' : 'low';
+  const confLabel = conf >= 0.50 ? 'High confidence' : conf >= 0.30 ? 'Medium confidence' : 'Low confidence';
+
+  const top5 = results.slice(0,5);
+  const maxProb = top5[0].prob;
+
+  const barsHtml = top5.map((r,i) => `
+    <div class="bar-row">
+      <div class="bar-label">${r.intent}</div>
+      <div class="bar-track">
+        <div class="bar-fill ${i===0?'top1':''}" style="width:${(r.prob/maxProb*100).toFixed(1)}%"></div>
+      </div>
+      <div class="bar-pct ${i===0?(conf>=0.5?'c-high':conf>=0.3?'c-mid':'c-low'):''}">${(r.prob*100).toFixed(1)}%</div>
+    </div>`).join('');
+
+  document.getElementById('single-result').innerHTML = `
+    <div class="result-card">
+      <div class="result-query">"${text}"</div>
+      <div class="result-top">
+        <span class="intent-badge ${confClass}">${top.intent}</span>
+        <span class="conf-text">${confLabel} · ${(conf*100).toFixed(1)}%</span>
+      </div>
+      <div class="bars">${barsHtml}</div>
+    </div>`;
+}
+
+// ── BATCH TEST ─────────────────────────────────────────────────────────
+function runBatch() {
+  const lines = document.getElementById('batch-input').value
+    .split('\n').map(l=>l.trim()).filter(Boolean);
+  if (!lines.length || !BRAIN) return;
+
+  let pass = 0, total = lines.length;
+
+  // Parse lines — support "input | expected_intent" format
+  const rows = lines.map(line => {
+    const parts = line.split('|').map(s=>s.trim());
+    return { text: parts[0], expected: parts[1] || null };
+  });
+
+  const rowsHtml = rows.map(({text, expected}) => {
+    const results = classify(text);
+    const top = results[0];
+    const conf = top.prob;
+    const correct = expected ? top.intent === expected : null;
+    if (correct === true) pass++;
+    const confClass = conf >= 0.50 ? 'c-high' : conf >= 0.30 ? 'c-mid' : 'c-low';
+    const second = results[1];
+    return `<tr>
+      <td>${text}</td>
+      <td><strong>${top.intent}</strong></td>
+      <td class="${confClass}">${(conf*100).toFixed(1)}%</td>
+      <td style="color:#888;font-size:11px">${second.intent} (${(second.prob*100).toFixed(1)}%)</td>
+      ${expected ? `<td>${expected}</td><td class="${correct?'pass':'fail'}">${correct?'✓':'✗'}</td>` : '<td colspan="2" style="color:#ccc">—</td>'}
+    </tr>`;
+  }).join('');
+
+  const hasExpected = rows.some(r=>r.expected);
+  const accuracy = hasExpected ? `${pass}/${rows.filter(r=>r.expected).length} correct (${(pass/rows.filter(r=>r.expected).length*100).toFixed(0)}%)` : null;
+
+  document.getElementById('batch-result').innerHTML = `
+    ${accuracy ? `<div class="score-summary">
+      <div class="score-item"><strong>${accuracy}</strong><br><span style="font-size:12px;color:#888">accuracy on labelled inputs</span></div>
+      <div class="score-item"><strong>${total}</strong><br><span style="font-size:12px;color:#888">total inputs tested</span></div>
+    </div>` : ''}
+    <table class="batch-table">
+      <thead><tr>
+        <th>Input</th><th>Predicted Intent</th><th>Confidence</th><th>2nd Guess</th>
+        ${hasExpected ? '<th>Expected</th><th>Result</th>' : ''}
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
+}
+
+function loadSample() {
+  document.getElementById('batch-input').value = [
+    "spent 500 on lunch | log_transaction",
+    "got salary 45000 | log_transaction",
+    "hi scott | small_talk",
+    "thanks | small_talk",
+    "what is inflation | wiki_finance_term",
+    "explain compound interest | wiki_concept",
+    "what is ppf | wiki_product",
+    "am i doing okay | query_status",
+    "how am i financially | query_status",
+    "what is my score | query_score",
+    "show my spending ratio | query_ratio",
+    "how should i allocate my income | query_allocation",
+    "what if i invest 5000 more | query_whatif",
+    "project my wealth in 5 years | query_velocity",
+    "am i saving enough | query_savings",
+    "how does this month compare to last | query_compare",
+    "give me a tip | query_tip",
+    "i got a raise | query_salary_raise",
+    "i got a bonus what to do | query_bonus",
+    "i lost my job | query_job_loss",
+    "should i start a sip | query_sip",
+    "fd vs mutual fund which is better | query_fd_vs_mf",
+    "i feel guilty about spending | query_guilt",
+    "i keep overspending on food | query_overspend_category",
+    "how to build a savings habit | query_habit",
+    "what is my net worth | query_networth",
+    "should i pay debt or invest | query_debt_strategy",
+    "how long to save 5 lakhs | query_goal",
+    "biggest expense category | query_expense_breakdown",
+    "where is my money going | query_biggest_leak",
+    "how much is my emi burden | query_emi_impact",
+    "how much surplus do i have | query_surplus",
+    "how to save tax | query_tax_basic",
+    "should i buy a car | query_big_purchase",
+    "i am moving to mumbai | query_moving",
+    "planning to get married | query_family_expense",
+    "i have irregular income | query_freelance",
+    "is gold a good investment | query_gold",
+    "do i need term insurance | query_insurance",
+    "should i get a credit card | query_credit_card",
+  ].join('\n');
+}
+
+function clearBatch() {
+  document.getElementById('batch-input').value = '';
+  document.getElementById('batch-result').innerHTML = '';
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────
+loadModel();
+</script>
+</body>
+</html>
