@@ -505,7 +505,18 @@ async function handleSend(){
 
   // ── Layer 5: Intelligence routing (questions, analysis) ─────────────────
   const intelligenceReply=routeInput(text);
-  if(intelligenceReply){appendMsg('scott',intelligenceReply);ctxPush(text,null,'query');_enable();return;}
+  if(intelligenceReply){
+    // Wiki intents return a signal string — show placeholder first, then fetch
+    if(intelligenceReply.startsWith('__WIKI__:')){
+      const wikiQuery = intelligenceReply.slice(9);
+      const wikiDiv = appendMsg('scott', 'One moment, Sir \u2014 consulting the archives\u2026');
+      const wikiBubble = wikiDiv.querySelector('.msg-bubble');
+      _fetchWiki(wikiQuery, wikiBubble);
+    } else {
+      appendMsg('scott',intelligenceReply);
+    }
+    ctxPush(text,null,'query');_enable();return;
+  }
 
   // ── Layer 6: Smart disambiguation — smarter than "I don't understand" ───
   const disambig=smartDisambiguate(text);
@@ -2363,8 +2374,7 @@ Buy insurance when young and healthy, Sir. Waiting makes it costlier or unavaila
     case 'wiki_product':
     case 'wiki_regulation':
     case 'wiki_general': {
-      _fetchWiki(text); // async — returns placeholder, updates bubble when done
-      return `One moment, Sir — consulting the archives...`;
+      return `__WIKI__:${text}`; // signal to handleSend to call _fetchWiki after bubble is created
     }
     default:
       return null;
@@ -2384,7 +2394,7 @@ function _extractWikiTerm(text) {
   return t.split(/\s+/).slice(0, 4).join(' ').trim();
 }
 
-async function _fetchWiki(text) {
+async function _fetchWiki(text, bubble) {
   const term = _extractWikiTerm(text);
   if (!term) return;
   const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(term)}`;
@@ -2393,22 +2403,15 @@ async function _fetchWiki(text) {
     if (!r.ok) throw new Error('not found');
     const data = await r.json();
     const extract = data.extract || data.description || 'No summary available.';
-    const short = extract.length > 600 ? extract.slice(0, 600) + '…' : extract;
-    // Update the last Scott bubble (the placeholder "consulting the archives...")
-    const chat = document.getElementById('chat');
-    const bubbles = chat.querySelectorAll('.msg.scott .msg-bubble');
-    const last = bubbles[bubbles.length - 1];
-    if (last && last.textContent.includes('consulting the archives')) {
-      last.textContent = '';
-      typeMsg(last, `From the archives, Sir — on "${data.title || term}":\n\n${short}\n\nThis is from Wikipedia. For financial decisions, always verify with a qualified advisor.`, () => { const chat = document.getElementById('chat'); if(chat) chat.scrollTop = chat.scrollHeight; });
+    const short = extract.length > 600 ? extract.slice(0, 600) + '\u2026' : extract;
+    if (bubble) {
+      bubble.innerHTML = '';
+      typeMsg(bubble, `From the archives, Sir \u2014 on "${data.title || term}":\n\n${short}\n\nThis is from Wikipedia. For financial decisions, always verify with a qualified advisor.`, () => { const chat = document.getElementById('chat'); if(chat) chat.scrollTop = chat.scrollHeight; });
     }
   } catch(e) {
-    const chat = document.getElementById('chat');
-    const bubbles = chat.querySelectorAll('.msg.scott .msg-bubble');
-    const last = bubbles[bubbles.length - 1];
-    if (last && last.textContent.includes('consulting the archives')) {
-      last.textContent = '';
-      typeMsg(last, `I wasn't able to locate "${term}" in the archives, Sir. Could you rephrase or be more specific?`, () => { const chat = document.getElementById('chat'); if(chat) chat.scrollTop = chat.scrollHeight; });
+    if (bubble) {
+      bubble.innerHTML = '';
+      typeMsg(bubble, `I wasn't able to locate "${term}" in the archives, Sir. Could you rephrase or be more specific?`, () => { const chat = document.getElementById('chat'); if(chat) chat.scrollTop = chat.scrollHeight; });
     }
   }
 }
