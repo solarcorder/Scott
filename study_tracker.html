@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Study Ledger</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --parchment: #f5f0e8;
+  --parchment-dark: #ede6d8;
+  --parchment-deeper: #e4dcc8;
+  --ink: #2c2416;
+  --ink-light: #6b5d4f;
+  --ink-faint: #a8997e;
+  --rule: #d4c9b0;
+  --gold: #8b7355;
+  --gold-light: #c4a96e;
+  --gold-pale: #f0e8d4;
+  --green: #4a7c59;
+}
+
+body {
+  font-family: 'EB Garamond', Georgia, serif;
+  background: var(--parchment);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--ink);
+  color: var(--parchment);
+  padding: 22px 48px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  border-bottom: 2px solid var(--gold);
+}
+.header-brand { display: flex; flex-direction: column; gap: 3px; }
+.header-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+.header-sub {
+  font-size: 11px;
+  color: var(--gold-light);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-style: italic;
+}
+.header-divider {
+  width: 1px; height: 34px;
+  background: #3d3220;
+  margin: 0 8px;
+}
+.header-stats { display: flex; gap: 28px; margin-left: auto; }
+.stat { text-align: right; }
+.stat-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 21px;
+  color: var(--gold-light);
+  line-height: 1;
+  display: block;
+}
+.stat-label {
+  font-size: 9px;
+  color: #7a6a56;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* ── PROGRESS BAR ── */
+.progress-strip { height: 2px; background: #1e1810; }
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 100%);
+  transition: width 0.5s cubic-bezier(.4,0,.2,1);
+}
+
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  padding: 0 48px;
+  background: var(--ink);
+  border-bottom: 1px solid #1a1208;
+  gap: 2px;
+}
+.tab {
+  padding: 10px 22px;
+  font-family: 'EB Garamond', serif;
+  font-size: 11.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7a6a56;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+  position: relative; top: 1px;
+}
+.tab:hover { color: #c4a96e; }
+.tab.active { color: var(--gold-light); border-bottom-color: var(--gold-light); }
+
+/* ── LAYOUT ── */
+.layout {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  min-height: calc(100vh - 98px);
+}
+
+/* ── SIDEBAR ── */
+.sidebar {
+  background: var(--parchment-dark);
+  border-right: 1px solid var(--rule);
+  padding: 28px 0 48px;
+  position: sticky;
+  top: 98px;
+  height: calc(100vh - 98px);
+  overflow-y: auto;
+}
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--gold); }
+
+.sb-class-label {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 14px 22px 5px;
+}
+.sb-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 22px;
+  font-size: 12.5px;
+  color: var(--ink-light);
+  cursor: pointer;
+  transition: background 0.13s, color 0.13s;
+  border-left: 2px solid transparent;
+  line-height: 1.35;
+}
+.sb-link:hover { background: var(--parchment-deeper); color: var(--ink); }
+.sb-link.sb-done { color: var(--ink-faint); }
+.sb-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--rule);
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+.sb-link.sb-done .sb-dot { background: var(--green); }
+
+/* ── CONTENT ── */
+.content { padding: 40px 52px 80px; max-width: 740px; }
+
+/* ── SUBJECT PANEL ── */
+.subject-panel { display: none; }
+.subject-panel.active { display: block; }
+
+.subject-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 4px;
+}
+.subject-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 30px;
+  font-weight: 400;
+  font-style: italic;
+}
+.subject-prog { font-size: 13px; color: var(--ink-faint); }
+
+/* ── CLASS GROUP ── */
+.class-group { margin-top: 32px; margin-bottom: 12px; }
+.class-label {
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 6px;
+}
+.class-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* ── CHAPTER ROW ── */
+.chapter-item {
+  display: grid;
+  grid-template-columns: 22px 1fr auto;
+  align-items: start;
+  gap: 13px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ece6d8;
+}
+.chapter-item:last-child { border-bottom: none; }
+
+.chapter-item.done .chapter-name {
+  text-decoration: line-through;
+  color: var(--ink-faint);
+}
+.chapter-item.done .check-box {
+  background: var(--green);
+  border-color: var(--green);
+}
+.chapter-item.done .check-box svg { display: block; }
+
+/* ── CHECKBOX ── */
+.check-box {
+  width: 20px; height: 20px;
+  border: 1.5px solid var(--rule);
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.check-box:hover { border-color: var(--gold); }
+.check-box svg { display: none; }
+
+/* ── CHAPTER MAIN ── */
+.chapter-main { min-width: 0; }
+.chapter-name {
+  font-size: 15.5px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: color 0.13s;
+  user-select: none;
+}
+.chapter-name:hover { color: var(--gold); }
+
+/* ── NOTES AREA ── */
+.notes-area {
+  display: none;
+  margin-top: 9px;
+  padding: 10px 13px 12px;
+  background: var(--gold-pale);
+  border-left: 2px solid var(--gold-light);
+  border-radius: 0 4px 4px 0;
+  animation: slideDown 0.15s ease;
+}
+.notes-area.open { display: block; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.notes-list { margin-bottom: 9px; }
+.note-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 2px 0;
+  font-size: 13px;
+  color: var(--ink-light);
+  font-style: italic;
+  line-height: 1.55;
+}
+.note-bullet {
+  color: var(--gold);
+  font-style: normal;
+  font-size: 11px;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.note-text { flex: 1; }
+.note-del {
+  background: none; border: none;
+  cursor: pointer;
+  color: var(--rule);
+  font-size: 15px;
+  padding: 0; line-height: 1;
+  transition: color 0.13s;
+  flex-shrink: 0;
+}
+.note-del:hover { color: #c0392b; }
+.empty-note {
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-style: italic;
+  padding-bottom: 4px;
+}
+.note-input-row { display: flex; gap: 6px; }
+.note-input {
+  flex: 1;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  font-style: italic;
+  padding: 5px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: #faf7f0;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s;
+}
+.note-input:focus { border-color: var(--gold); }
+.note-input::placeholder { color: var(--ink-faint); }
+.note-add-btn {
+  padding: 5px 13px;
+  background: var(--ink);
+  color: var(--parchment);
+  border: none; border-radius: 4px;
+  font-family: 'EB Garamond', serif;
+  font-size: 13px;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  transition: background 0.13s;
+}
+.note-add-btn:hover { background: #3d3220; }
+
+/* ── NOTE TOGGLE BUTTON ── */
+.note-toggle {
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: 'EB Garamond', serif;
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.07em;
+  padding: 3px 9px;
+  border-radius: 20px;
+  transition: all 0.14s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.note-toggle:hover {
+  color: var(--gold);
+  border-color: var(--rule);
+  background: var(--gold-pale);
+}
+.note-toggle.has-notes {
+  color: var(--gold);
+  border-color: var(--rule);
+}
+.note-badge {
+  background: var(--ink);
+  color: var(--parchment);
+  font-size: 9px;
+  border-radius: 20px;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  display: none;
+  line-height: 1.5;
+}
+.note-badge.show { display: inline-block; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-brand">
+    <div class="header-title">Study Ledger</div>
+    <div class="header-sub">Class XI &amp; XII · Science</div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="header-stats">
+    <div class="stat">
+      <span class="stat-num" id="total-done">0</span>
+      <span class="stat-label">Completed</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num" id="total-chapters">0</span>
+      <span class="stat-label">Total</span>
+    </div>
+    <div class="stat">
+      <span class="stat-num" id="overall-pct">0%</span>
+      <span class="stat-label">Progress</span>
+    </div>
+  </div>
+</div>
+<div class="progress-strip">
+  <div class="progress-fill" id="progress-bar" style="width:0%"></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('physics',this)">Physics</div>
+  <div class="tab" onclick="switchTab('chemistry',this)">Chemistry</div>
+  <div class="tab" onclick="switchTab('math',this)">Mathematics</div>
+</div>
+
+<div class="layout">
+  <div class="sidebar" id="sidebar"></div>
+
+  <div class="content">
+
+    <div class="subject-panel active" id="panel-physics">
+      <div class="subject-header">
+        <div class="subject-name">Physics</div>
+        <div class="subject-prog" id="prog-physics"></div>
+      </div>
+      <div class="class-group">
+        <div class="class-label">Class XI</div>
+        <div id="chapters-physics-11"></div>
+      </div>
+      <div class="class-group">
+        <div class="class-label">Class XII</div>
+        <div id="chapters-physics-12"></div>
+      </div>
+    </div>
+
+    <div class="subject-panel" id="panel-chemistry">
+      <div class="subject-header">
+        <div class="subject-name">Chemistry</div>
+        <div class="subject-prog" id="prog-chemistry"></div>
+      </div>
+      <div class="class-group">
+        <div class="class-label">Class XI</div>
+        <div id="chapters-chemistry-11"></div>
+      </div>
+      <div class="class-group">
+        <div class="class-label">Class XII</div>
+        <div id="chapters-chemistry-12"></div>
+      </div>
+    </div>
+
+    <div class="subject-panel" id="panel-math">
+      <div class="subject-header">
+        <div class="subject-name">Mathematics</div>
+        <div class="subject-prog" id="prog-math"></div>
+      </div>
+      <div class="class-group">
+        <div class="class-label">Class XI</div>
+        <div id="chapters-math-11"></div>
+      </div>
+      <div class="class-group">
+        <div class="class-label">Class XII</div>
+        <div id="chapters-math-12"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const CURRICULUM = {
+  physics: {
+    11: [
+      'Units and Measurements','Motion in a Straight Line','Motion in a Plane',
+      'Laws of Motion','Work, Energy and Power',
+      'System of Particles and Rotational Motion','Gravitation',
+      'Mechanical Properties of Solids','Mechanical Properties of Fluids',
+      'Thermal Properties of Matter','Thermodynamics','Kinetic Theory',
+      'Oscillations','Waves',
+    ],
+    12: [
+      'Electric Charges and Fields','Electrostatic Potential and Capacitance',
+      'Current Electricity','Moving Charges and Magnetism','Magnetism and Matter',
+      'Electromagnetic Induction','Alternating Current','Electromagnetic Waves',
+      'Ray Optics and Optical Instruments','Wave Optics',
+      'Dual Nature of Radiation and Matter','Atoms','Nuclei',
+      'Semiconductor Electronics',
+    ],
+  },
+  chemistry: {
+    11: [
+      'Some Basic Concepts of Chemistry','Structure of Atom',
+      'Classification of Elements and Periodicity in Properties',
+      'Chemical Bonding and Molecular Structure','Chemical Thermodynamics',
+      'Equilibrium','Redox Reactions',
+      'Organic Chemistry — Basic Principles and Techniques','Hydrocarbons',
+    ],
+    12: [
+      'Solutions','Electrochemistry','Chemical Kinetics',
+      'd and f Block Elements','Coordination Compounds',
+      'Haloalkanes and Haloarenes','Alcohols, Phenols and Ethers',
+      'Aldehydes, Ketones and Carboxylic Acids','Amines','Biomolecules',
+    ],
+  },
+  math: {
+    11: [
+      'Sets','Relations and Functions','Trigonometric Functions',
+      'Complex Numbers and Quadratic Equations','Linear Inequalities',
+      'Permutations and Combinations','Binomial Theorem','Sequence and Series',
+      'Straight Lines','Conic Sections',
+      'Introduction to Three-Dimensional Geometry',
+      'Limits and Derivatives','Statistics','Probability',
+    ],
+    12: [
+      'Relations and Functions','Inverse Trigonometric Functions',
+      'Matrices','Determinants','Continuity and Differentiability',
+      'Applications of Derivatives','Integrals','Applications of Integrals',
+      'Differential Equations','Vectors','Three-Dimensional Geometry',
+      'Linear Programming','Probability',
+    ],
+  },
+};
+
+let currentSubject = 'physics';
+
+function cid(s, c, n) { return `${s}_${c}_${n.replace(/\W+/g,'_')}`; }
+function getState() { try { return JSON.parse(localStorage.getItem('study_ledger_v2')||'{}'); } catch(e) { return {}; } }
+function saveState(s) { localStorage.setItem('study_ledger_v2', JSON.stringify(s)); }
+
+function renderAll() {
+  const state = getState();
+  let td = 0, tc = 0;
+  for (const [sub, classes] of Object.entries(CURRICULUM)) {
+    let sd = 0, st = 0;
+    for (const [cls, chs] of Object.entries(classes)) {
+      const el = document.getElementById(`chapters-${sub}-${cls}`);
+      if (!el) continue;
+      el.innerHTML = '';
+      for (const name of chs) {
+        const id = cid(sub, cls, name);
+        const done = !!state[id]?.done;
+        const notes = state[id]?.notes || [];
+        st++; tc++;
+        if (done) { sd++; td++; }
+        el.appendChild(makeChapter(id, name, done, notes));
+      }
+    }
+    const p = document.getElementById(`prog-${sub}`);
+    if (p) p.textContent = `${sd} of ${st} completed`;
+  }
+  document.getElementById('total-done').textContent = td;
+  document.getElementById('total-chapters').textContent = tc;
+  const pct = tc > 0 ? Math.round(td/tc*100) : 0;
+  document.getElementById('overall-pct').textContent = pct + '%';
+  document.getElementById('progress-bar').style.width = pct + '%';
+  renderSidebar(state);
+}
+
+function makeChapter(id, name, done, notes) {
+  const div = document.createElement('div');
+  div.className = 'chapter-item' + (done ? ' done' : '');
+  div.id = `item-${id}`;
+
+  // checkbox
+  const box = document.createElement('div');
+  box.className = 'check-box';
+  box.innerHTML = `<svg width="11" height="9" viewBox="0 0 11 9" fill="none"><path d="M1 4L4 7.5L10 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  box.onclick = () => toggleDone(id);
+
+  // main col
+  const main = document.createElement('div');
+  main.className = 'chapter-main';
+
+  const nameEl = document.createElement('div');
+  nameEl.className = 'chapter-name';
+  nameEl.textContent = name;
+  nameEl.onclick = () => openNotes(id);
+  main.appendChild(nameEl);
+
+  // notes area
+  const area = document.createElement('div');
+  area.className = 'notes-area';
+  area.id = `notes-${id}`;
+
+  const list = document.createElement('div');
+  list.className = 'notes-list';
+  list.id = `list-${id}`;
+  renderList(list, id, notes);
+
+  const row = document.createElement('div');
+  row.className = 'note-input-row';
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.className = 'note-input';
+  inp.placeholder = 'Add a note…'; inp.id = `inp-${id}`;
+  inp.onkeydown = e => { if (e.key === 'Enter') addNote(id); };
+  const btn = document.createElement('button');
+  btn.className = 'note-add-btn'; btn.textContent = 'Add';
+  btn.onclick = () => addNote(id);
+  row.appendChild(inp); row.appendChild(btn);
+  area.appendChild(list); area.appendChild(row);
+  main.appendChild(area);
+
+  // toggle
+  const toggle = document.createElement('button');
+  toggle.className = 'note-toggle' + (notes.length > 0 ? ' has-notes' : '');
+  toggle.id = `toggle-${id}`;
+  toggle.onclick = () => openNotes(id);
+  const badge = document.createElement('span');
+  badge.className = 'note-badge' + (notes.length > 0 ? ' show' : '');
+  badge.id = `badge-${id}`; badge.textContent = notes.length;
+  toggle.appendChild(document.createTextNode('Notes '));
+  toggle.appendChild(badge);
+
+  div.appendChild(box); div.appendChild(main); div.appendChild(toggle);
+  return div;
+}
+
+function renderList(container, id, notes) {
+  container.innerHTML = '';
+  if (!notes.length) {
+    const e = document.createElement('div');
+    e.className = 'empty-note'; e.textContent = 'No notes yet.';
+    container.appendChild(e); return;
+  }
+  notes.forEach((note, i) => {
+    const item = document.createElement('div'); item.className = 'note-item';
+    const bullet = document.createElement('span'); bullet.className = 'note-bullet'; bullet.textContent = '—';
+    const text = document.createElement('span'); text.className = 'note-text'; text.textContent = note;
+    const del = document.createElement('button'); del.className = 'note-del'; del.textContent = '×';
+    del.onclick = () => deleteNote(id, i);
+    item.appendChild(bullet); item.appendChild(text); item.appendChild(del);
+    container.appendChild(item);
+  });
+}
+
+function renderSidebar(state) {
+  const sb = document.getElementById('sidebar'); sb.innerHTML = '';
+  for (const [cls, chs] of Object.entries(CURRICULUM[currentSubject])) {
+    const label = document.createElement('div');
+    label.className = 'sb-class-label';
+    label.textContent = `Class ${cls === '11' ? 'XI' : 'XII'}`;
+    sb.appendChild(label);
+    for (const name of chs) {
+      const id = cid(currentSubject, cls, name);
+      const done = !!state[id]?.done;
+      const link = document.createElement('div');
+      link.className = 'sb-link' + (done ? ' sb-done' : '');
+      link.onclick = () => document.getElementById(`item-${id}`)?.scrollIntoView({ behavior:'smooth', block:'center' });
+      const dot = document.createElement('div'); dot.className = 'sb-dot';
+      const txt = document.createElement('span'); txt.textContent = name;
+      link.appendChild(dot); link.appendChild(txt);
+      sb.appendChild(link);
+    }
+  }
+}
+
+function toggleDone(id) {
+  const state = getState();
+  if (!state[id]) state[id] = {};
+  state[id].done = !state[id].done;
+  saveState(state);
+  const item = document.getElementById(`item-${id}`);
+  if (item) item.classList.toggle('done', state[id].done);
+  renderSidebar(state);
+  updateStats(state);
+}
+
+function openNotes(id) {
+  const area = document.getElementById(`notes-${id}`);
+  if (!area) return;
+  const was = area.classList.contains('open');
+  document.querySelectorAll('.notes-area.open').forEach(a => a.classList.remove('open'));
+  if (!was) {
+    area.classList.add('open');
+    setTimeout(() => document.getElementById(`inp-${id}`)?.focus(), 60);
+  }
+}
+
+function addNote(id) {
+  const inp = document.getElementById(`inp-${id}`);
+  if (!inp) return;
+  const text = inp.value.trim(); if (!text) return;
+  const state = getState();
+  if (!state[id]) state[id] = {};
+  if (!state[id].notes) state[id].notes = [];
+  state[id].notes.push(text); saveState(state);
+  inp.value = '';
+  const list = document.getElementById(`list-${id}`);
+  if (list) renderList(list, id, state[id].notes);
+  refreshBadge(id, state[id].notes.length);
+}
+
+function deleteNote(id, i) {
+  const state = getState();
+  if (!state[id]?.notes) return;
+  state[id].notes.splice(i, 1); saveState(state);
+  const list = document.getElementById(`list-${id}`);
+  if (list) renderList(list, id, state[id].notes);
+  refreshBadge(id, state[id].notes.length);
+}
+
+function refreshBadge(id, count) {
+  const badge = document.getElementById(`badge-${id}`);
+  if (badge) { badge.textContent = count; badge.classList.toggle('show', count > 0); }
+  const toggle = document.getElementById(`toggle-${id}`);
+  if (toggle) toggle.classList.toggle('has-notes', count > 0);
+}
+
+function updateStats(state) {
+  let td = 0, tc = 0;
+  for (const [sub, classes] of Object.entries(CURRICULUM)) {
+    let sd = 0, st = 0;
+    for (const [cls, chs] of Object.entries(classes)) {
+      for (const name of chs) {
+        const id = cid(sub, cls, name); st++; tc++;
+        if (state[id]?.done) { sd++; td++; }
+      }
+    }
+    const p = document.getElementById(`prog-${sub}`);
+    if (p) p.textContent = `${sd} of ${st} completed`;
+  }
+  document.getElementById('total-done').textContent = td;
+  document.getElementById('total-chapters').textContent = tc;
+  const pct = tc > 0 ? Math.round(td/tc*100) : 0;
+  document.getElementById('overall-pct').textContent = pct + '%';
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+function switchTab(subject, el) {
+  currentSubject = subject;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.subject-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(`panel-${subject}`).classList.add('active');
+  renderSidebar(getState());
+}
+
+renderAll();
+</script>
+</body>
+</html>
